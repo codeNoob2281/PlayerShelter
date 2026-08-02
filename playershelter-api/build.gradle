@@ -3,5 +3,5 @@
 // 事件类 extends org.bukkit.event.Event，故 compileOnly paper-api；不依赖 core（自带轻量 DTO，保持隔离）。
 
 dependencies {
-    compileOnly 'io.papermc.paper:paper-api:26.2.build.48-alpha'
+    compileOnly 'io.papermc.paper:paper-api:1.21.1-R0.1-SNAPSHOT'
 }

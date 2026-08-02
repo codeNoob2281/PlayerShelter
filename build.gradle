@@ -1,6 +1,5 @@
 // 根工程 = 父配置容器。实际产物在各子模块（PLAN.md §2）。
-// 在 root 用 apply false 声明项目插件 → 加载进 root 类加载器，子项目应用时共享同一份类
-//（多模块标准做法，且修了 NeoGradle 'settings' 扩展冲突）。
+// 在 root 用 apply false 声明项目插件 → 加载进 root 类加载器，子项目应用时共享同一份类。
 plugins {
     id 'net.neoforged.gradle.userdev' apply false
     id 'com.gradleup.shadow' apply false
@@ -35,7 +34,7 @@ subprojects {
         }
     }
 
-    java.toolchain.languageVersion = JavaLanguageVersion.of(25)
+    java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
     tasks.withType(JavaCompile).configureEach {
         options.encoding = 'UTF-8'

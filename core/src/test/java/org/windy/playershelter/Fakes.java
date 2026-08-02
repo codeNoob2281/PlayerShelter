@@ -9,6 +9,7 @@ import org.windy.playershelter.domain.port.ShelterRepository;
 import org.windy.playershelter.domain.port.WorldControl;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -93,6 +94,8 @@ final class Fakes {
             withdrawn += amount;
             return true;
         }
+
+        @Override public double balance(PlayerRef player) { return balance; }
     }
 
     static final class FakeItemCosts implements ItemCostPort {
@@ -117,6 +120,19 @@ final class Fakes {
                 inventory.merge(cost.itemId(), -cost.amount(), Integer::sum);
             }
             return true;
+        }
+
+        @Override
+        public List<ItemCost> missingItems(PlayerRef player, List<ItemCost> costs) {
+            List<ItemCost> missing = new ArrayList<>();
+            for (ItemCost cost : costs) {
+                if (!cost.valid()) continue;
+                int have = inventory.getOrDefault(cost.itemId(), 0);
+                if (have < cost.amount()) {
+                    missing.add(new ItemCost(cost.itemId(), cost.amount() - have));
+                }
+            }
+            return missing;
         }
     }
 }

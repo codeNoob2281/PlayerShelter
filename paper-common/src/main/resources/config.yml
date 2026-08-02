@@ -20,6 +20,11 @@ migration:
     # false = 遇到已加载缓存就拒绝写入，适合最保守的生产模式。
     evict-loaded-cache: true
 
+# GuildShelter 软集成：玩家获得公会庄园时，自动将庇护所建筑迁移至庄园。
+# 需要服务器同时安装 GuildShelter；未安装时此选项无效。
+guildshelter-migration:
+  enabled: true
+
 directory:
   public-min-level: 3
 

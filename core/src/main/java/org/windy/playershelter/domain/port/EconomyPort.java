@@ -19,10 +19,14 @@ public interface EconomyPort {
     /** 扣款；成功返回 true。enabled=false 恒 true（不扣）。 */
     boolean withdraw(PlayerRef player, double amount);
 
+    /** 玩家当前余额。enabled=false 返回 0。 */
+    double balance(PlayerRef player);
+
     /** 桩：经济关闭、永远免费成功。 */
     EconomyPort DISABLED = new EconomyPort() {
         @Override public boolean enabled() { return false; }
         @Override public boolean has(PlayerRef player, double amount) { return true; }
         @Override public boolean withdraw(PlayerRef player, double amount) { return true; }
+        @Override public double balance(PlayerRef player) { return 0; }
     };
 }

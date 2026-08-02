@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -73,7 +74,7 @@ class ShelterServiceTest {
         Shelter before = repo.find(owner).orElseThrow();
 
         ShelterService.UpgradeResult r = s.upgrade(owner);
-        assertEquals(ShelterService.UpgradeResult.OK, r);
+        assertInstanceOf(ShelterService.UpgradeResult.Ok.class, r);
         Shelter after = repo.find(owner).orElseThrow();
         assertEquals(2, after.level());
         assertEquals(6, before.sideChunks());
@@ -83,9 +84,14 @@ class ShelterServiceTest {
 
     @Test
     void upgradeBlockedWhenBroke() {
-        ShelterService s = svc(new Fakes.FakeEconomy(true, 10)); // 余额不足 1000
+        Fakes.FakeEconomy eco = new Fakes.FakeEconomy(true, 10); // 余额不足 1000
+        ShelterService s = svc(eco);
         s.create(owner, GenerationType.NATURAL, null, x -> {}, () -> {});
-        assertEquals(ShelterService.UpgradeResult.NO_FUNDS, s.upgrade(owner));
+        ShelterService.UpgradeResult r = s.upgrade(owner);
+        assertInstanceOf(ShelterService.UpgradeResult.NoFunds.class, r);
+        ShelterService.UpgradeResult.NoFunds nf = (ShelterService.UpgradeResult.NoFunds) r;
+        assertEquals(1000, nf.cost());
+        assertEquals(10, nf.balance());
         assertEquals(1, repo.find(owner).orElseThrow().level()); // 没升
     }
 
@@ -93,7 +99,7 @@ class ShelterServiceTest {
     void upgradeFreeWhenEconomyDisabled() {
         ShelterService s = svc(new Fakes.FakeEconomy(false, 0));
         s.create(owner, GenerationType.NATURAL, null, x -> {}, () -> {});
-        assertEquals(ShelterService.UpgradeResult.OK, s.upgrade(owner)); // 经济关 → 免费成功
+        assertInstanceOf(ShelterService.UpgradeResult.Ok.class, s.upgrade(owner)); // 经济关 → 免费成功
     }
 
     @Test
@@ -106,7 +112,13 @@ class ShelterServiceTest {
                 items, cfg, Clock.systemUTC(), new org.windy.playershelter.domain.port.ResetLogStore.InMemory());
 
         s.create(owner, GenerationType.NATURAL, null, x -> {}, () -> {});
-        assertEquals(ShelterService.UpgradeResult.NO_MATERIALS, s.upgrade(owner));
+        ShelterService.UpgradeResult r = s.upgrade(owner);
+        assertInstanceOf(ShelterService.UpgradeResult.NoMaterials.class, r);
+        ShelterService.UpgradeResult.NoMaterials nm = (ShelterService.UpgradeResult.NoMaterials) r;
+        assertEquals(1, nm.required().size());
+        assertEquals(64, nm.required().get(0).amount());
+        assertEquals(1, nm.missing().size());
+        assertEquals(32, nm.missing().get(0).amount()); // 有32 缺32
         assertEquals(1, repo.find(owner).orElseThrow().level());
         assertEquals(32, items.inventory.get("minecraft:oak_log"));
     }
@@ -121,7 +133,7 @@ class ShelterServiceTest {
                 items, cfg, Clock.systemUTC(), new org.windy.playershelter.domain.port.ResetLogStore.InMemory());
 
         s.create(owner, GenerationType.NATURAL, null, x -> {}, () -> {});
-        assertEquals(ShelterService.UpgradeResult.OK, s.upgrade(owner));
+        assertInstanceOf(ShelterService.UpgradeResult.Ok.class, s.upgrade(owner));
         assertEquals(2, repo.find(owner).orElseThrow().level());
         assertEquals(16, items.inventory.get("minecraft:oak_log"));
     }

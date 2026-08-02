@@ -24,6 +24,11 @@ public final class ApiImpl implements PlayerShelterApi {
         this.core = core;
     }
 
+    /** 内部访问（迁移监听器等同模块内部类用）。 */
+    public PsCore core() {
+        return core;
+    }
+
     @Override
     public int apiVersion() {
         return VERSION;

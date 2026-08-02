@@ -11,7 +11,7 @@ base {
 
 dependencies {
     implementation project(':paper-common')   // 传递带入 core + api
-    compileOnly 'io.papermc.paper:paper-api:26.2.build.48-alpha'
+    compileOnly 'io.papermc.paper:paper-api:1.21.1-R0.1-SNAPSHOT'
 }
 
 // plugin.yml 用到 ${mod_version} 等占位；版本串折进 git short hash + -dirty + 构建时间 → 启动 banner

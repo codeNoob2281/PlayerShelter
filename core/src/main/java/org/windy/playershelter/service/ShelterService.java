@@ -1,6 +1,7 @@
 package org.windy.playershelter.service;
 
 import org.windy.playershelter.domain.model.GenerationType;
+import org.windy.playershelter.domain.model.ItemCost;
 import org.windy.playershelter.domain.model.PlayerRef;
 import org.windy.playershelter.domain.model.Shelter;
 import org.windy.playershelter.domain.model.ShelterVisibility;
@@ -14,6 +15,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -99,41 +101,51 @@ public final class ShelterService {
 
     /**
      * 升级一级（等级提高可用地块边长 / #41 递增收费 / #17 经济可选）。
-     * 已满级 → 返回 {@link UpgradeResult#MAX_LEVEL}；钱不够 → {@link UpgradeResult#NO_FUNDS}；
+     * 已满级 → 返回 {@link UpgradeResult.MaxLevel}；钱不够 → {@link UpgradeResult.NoFunds}；
+     * 材料不足 → {@link UpgradeResult.NoMaterials}（含具体差额）；
      * 成功 → 等级 +1、按新等级同步角落锚定 WorldBorder、落库。
      */
     public UpgradeResult upgrade(PlayerRef owner) {
         Shelter s = repo.find(owner).orElse(null);
         if (s == null) {
-            return UpgradeResult.NO_SHELTER;
+            return new UpgradeResult.NoShelter();
         }
         if (s.isMaxLevel()) {
-            return UpgradeResult.MAX_LEVEL;
+            return new UpgradeResult.MaxLevel();
         }
+
         double cost = config.upgradeCost(s.level());
-        java.util.List<org.windy.playershelter.domain.model.ItemCost> items = config.upgradeItems(s.level());
-        if (cost > 0 && economy.enabled()) {
-            if (!economy.has(owner, cost)) {
-                return UpgradeResult.NO_FUNDS;
+        List<ItemCost> items = config.upgradeItems(s.level());
+
+        boolean needMoney = cost > 0 && economy.enabled();
+        boolean needItems = !items.isEmpty();
+
+        // 先检查所有前置条件，收集具体失败原因
+        if (needMoney && !economy.has(owner, cost)) {
+            return new UpgradeResult.NoFunds(cost, economy.balance(owner));
+        }
+        if (needItems) {
+            List<ItemCost> missing = itemCosts.missingItems(owner, items);
+            if (!missing.isEmpty()) {
+                return new UpgradeResult.NoMaterials(items, missing);
             }
         }
-        if (!items.isEmpty() && !itemCosts.has(owner, items)) {
-            return UpgradeResult.NO_MATERIALS;
+
+        // 前置检查通过，执行扣款（仍需防竞态）
+        if (needMoney && !economy.withdraw(owner, cost)) {
+            return new UpgradeResult.NoFunds(cost, economy.balance(owner));
         }
-        if (cost > 0 && economy.enabled()) {
-            if (!economy.withdraw(owner, cost)) {
-                return UpgradeResult.NO_FUNDS;
-            }
+        if (needItems && !itemCosts.withdraw(owner, items)) {
+            List<ItemCost> missing = itemCosts.missingItems(owner, items);
+            return new UpgradeResult.NoMaterials(items, missing);
         }
-        if (!items.isEmpty() && !itemCosts.withdraw(owner, items)) {
-            return UpgradeResult.NO_MATERIALS;
-        }
+
         Shelter up = s.withLevel(s.level() + 1).withAutoUnlockedChunksForLevel().withLastActive(clock.instant());
         repo.save(up);
         if (world.isLoaded(up.worldName())) {
             world.applyBorder(up);
         }
-        return UpgradeResult.OK;
+        return new UpgradeResult.Ok(s.level() + 1);
     }
 
     /**
@@ -308,7 +320,21 @@ public final class ShelterService {
 
     // —— 结果枚举 ——
 
-    public enum UpgradeResult { OK, NO_SHELTER, MAX_LEVEL, NO_FUNDS, NO_MATERIALS }
+    /**
+     * 升级结果：sealed interface 携带具体失败原因，方便适配层展示详细提示。
+     */
+    public sealed interface UpgradeResult {
+        /** 升级成功 */
+        record Ok(int newLevel) implements UpgradeResult {}
+        /** 没有庇护所 */
+        record NoShelter() implements UpgradeResult {}
+        /** 已满级 */
+        record MaxLevel() implements UpgradeResult {}
+        /** 余额不足 */
+        record NoFunds(double cost, double balance) implements UpgradeResult {}
+        /** 材料不足 */
+        record NoMaterials(List<ItemCost> required, List<ItemCost> missing) implements UpgradeResult {}
+    }
 
     public enum ResetResult { STARTED, NO_SHELTER, COOLDOWN, DAILY_LIMIT }
 }

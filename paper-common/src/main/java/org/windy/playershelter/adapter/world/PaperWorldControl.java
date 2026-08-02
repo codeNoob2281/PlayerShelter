@@ -141,7 +141,7 @@ public final class PaperWorldControl implements WorldControl {
         }
 
         // 1.21 注册表：取消常加载
-        GameRule<Integer> spawnRadius = (GameRule<Integer>) Registry.GAME_RULE.get(NamespacedKey.minecraft("spawn_chunk_radius"));
+        GameRule<Integer> spawnRadius = GameRule.SPAWN_CHUNK_RADIUS;
         if (spawnRadius != null) {
             world.setGameRule(spawnRadius, 0);
         }
@@ -226,7 +226,7 @@ public final class PaperWorldControl implements WorldControl {
             Bukkit.getScheduler().runTask(plugin, () -> {
 
                 // 1.21 注册表：取消常加载
-                GameRule<Integer> spawnRadius = (GameRule<Integer>) Registry.GAME_RULE.get(NamespacedKey.minecraft("spawn_chunk_radius"));
+                GameRule<Integer> spawnRadius = GameRule.SPAWN_CHUNK_RADIUS;
                 if (spawnRadius != null) {
                     w.setGameRule(spawnRadius, 0);
                 }
@@ -248,7 +248,7 @@ public final class PaperWorldControl implements WorldControl {
     private void applyConfiguredGameRules(World world) {
         for (Map.Entry<String, String> e : gamerules.entrySet()) {
             String key = e.getKey().toLowerCase();
-            GameRule rule = Registry.GAME_RULE.get(NamespacedKey.minecraft(key));
+            GameRule rule = GameRule.getByName(key);
             if (rule == null) {
                 log.warning("[PlayerShelter] 未知 gamerule: " + key);
                 continue;

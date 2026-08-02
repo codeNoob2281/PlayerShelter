@@ -79,6 +79,55 @@ public final class Messages {
         return format(key, fallback, map(values));
     }
 
+    /**
+     * Component 级格式化：支持混合 String 和 Component 值（如 TranslatableComponent）。
+     * 值为 String 的占位符走 legacy 颜色解析，值为 Component 的直接嵌入。
+     */
+    public static Component formatComponent(String key, String fallback, Object... values) {
+        String template = color(get(key, fallback));
+        // 按 { 切分模板
+        String[] parts = template.split("\\{", -1);
+        Component result = Component.empty();
+        for (int i = 0; i < parts.length; i++) {
+            if (i == 0) {
+                if (!parts[i].isEmpty()) {
+                    result = result.append(component(parts[i]));
+                }
+                continue;
+            }
+            int close = parts[i].indexOf('}');
+            if (close < 0) {
+                result = result.append(component("{" + parts[i]));
+                continue;
+            }
+            String placeholder = parts[i].substring(0, close);
+            String rest = parts[i].substring(close + 1);
+            // 在 values 里找对应值
+            Object val = findValue(placeholder, values);
+            if (val instanceof Component c) {
+                result = result.append(c);
+            } else if (val != null) {
+                result = result.append(component(String.valueOf(val)));
+            } else {
+                result = result.append(component("{" + placeholder + "}"));
+            }
+            if (!rest.isEmpty()) {
+                result = result.append(component(rest));
+            }
+        }
+        return result;
+    }
+
+    /** 从交替的 key/value 数组中按 placeholder 名查找值。 */
+    private static Object findValue(String placeholder, Object... values) {
+        for (int i = 0; i + 1 < values.length; i += 2) {
+            if (String.valueOf(values[i]).equals(placeholder)) {
+                return values[i + 1];
+            }
+        }
+        return null;
+    }
+
     public static String formatKey(String key, Object... values) {
         return format(key, "", values);
     }
@@ -127,6 +176,11 @@ public final class Messages {
         to.sendMessage(component(prefix + localized(msg)));
     }
 
+    /** 发送已组装好的 Component（带前缀，保留 TranslatableComponent）。 */
+    public static void sendComponent(CommandSender to, ChatColor tone, Component body) {
+        to.sendMessage(component(prefix).append(Component.text(tone.toString())).append(body));
+    }
+
     public static void info(CommandSender to, String msg) {
         send(to, tone("info", ChatColor.GRAY) + msg);
     }
@@ -145,6 +199,11 @@ public final class Messages {
 
     public static void plain(CommandSender to, String msg) {
         to.sendMessage(component(localized(msg)));
+    }
+
+    /** 发送无前缀的 Component（保留 TranslatableComponent）。 */
+    public static void plainComponent(CommandSender to, Component body) {
+        to.sendMessage(body);
     }
 
     public static Component component(String msg) {

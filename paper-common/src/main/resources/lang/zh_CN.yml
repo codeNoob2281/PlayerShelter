@@ -27,6 +27,51 @@ messages:
     off: "关闭"
     some-player: "某位玩家"
 
+  gui:
+    bulletin-default: "未设置"
+    upgrade-cost-free: "免费"
+    upgrade-state-max: "已满级"
+    upgrade-state-ready: "可升级"
+    upgrade-hint-max: "当前已到等级上限，点击只会收到提示。"
+    upgrade-hint-ready: "点击按钮执行升级。"
+    items-empty: "无"
+    flag-on: "&a开"
+    flag-off: "&c关"
+    flag-next-on: "开"
+    flag-next-off: "关"
+    visibility-private: "私密"
+    visibility-friends: "好友"
+    visibility-public: "公开"
+    sort-likes: "点赞"
+    sort-hot: "热门"
+    sort-random: "随机"
+    sort-newest: "最新"
+    limits-disabled: "已关闭"
+    limits-unloaded: "世界未加载"
+    limits-not-loaded: "未加载"
+    limits-live: "实时统计"
+    page-prev: "&f上一页"
+    page-prev-lore: "&7第 &f{page} &7页"
+    page-next: "&f下一页"
+    page-next-lore: "&7第 &f{page} &7页"
+    page-back: "&f返回"
+    page-back-lore-tag: "&7回到标签页。"
+    page-back-lore-directory: "&7回到社交页。"
+    directory-lore-level: "&7等级: &f{level}"
+    directory-lore-likes: "&7点赞: &f{likes}"
+    directory-lore-visibility: "&7可见性: &f{visibility}"
+    directory-lore-bulletin: "&7公告: &f{bulletin}"
+    directory-visit-hint: "&8左键拜访。"
+    board-author: "&7作者: &f{author}"
+    board-time: "&7时间: &f{time}"
+    board-number: "&7编号: &f{id}"
+    board-delete-hint: "&8左键删除这条留言。"
+    board-item-prefix: "&f留言 #"
+    empty-slot: "&7(空)"
+    tags-empty: "&7暂无标签"
+    tags-empty-hint: '&8点击"新增标签"来添加第一个标签。'
+    tags-remove-hint: "&8点击移除这条标签。"
+
   command:
     no-permission-sub: "&#ff6b6b你没有权限使用 /ps {command} 指令。"
     unknown: "&#ff6b6b未知指令：{command}，请输入 /ps help 查看帮助。"
@@ -58,10 +103,10 @@ messages:
 
   upgrade:
     permission-cap: "&#ff6b6b你的庇护所已满 {level} 级，无法继续升级（需要更高的 playershelter.maxlevel 权限）。"
-    no-materials: "&#ff6b6b升级材料不足，无法升级。"
+    no-materials: "&#ff6b6b升级材料不足，无法升级。\n&7需要：&f{required}\n&7缺少：&c{missing}"
     success: "升级成功！庇护所现为 {level} 级，边界已扩大至 &#ffda75{chunks} &f区块（{blocks} 格）。"
     max-level: "&#ff6b6b你的庇护所已经达到最高等级了。"
-    no-funds: "&#ff6b6b余额不足，无法升级。"
+    no-funds: "&#ff6b6b余额不足，无法升级。\n&7需要：&f{cost}&7，当前余额：&c{balance}"
 
   reset:
     warning: "&#ff6b6b✖ 警告：&#ffda75此操作将&#ff6b6b彻底清空&#ffda75并重新生成你的庇护所，所有建筑将无法找回！（等级将重置为 1）"
@@ -190,6 +235,7 @@ messages:
     add-exists: "&#ff6b6b你已经添加过这个标签了。"
     remove-success: "已成功移除标签：&#8ee5ee#{tag}"
     remove-missing: "&#ff6b6b找不到该标签。"
+    prompt-start: "在聊天里输入要添加的标签，输入 &f取消&e 放弃编辑。"
 
   search:
     usage: "用法：&#ffda75/ps search <标签>&f（例如：/ps search 现代建筑）"
@@ -197,6 +243,7 @@ messages:
     header: "&#8ee5ee❖ 标签为 #{tag} 的庇护所 ❖"
     row: "&f{name} &8· &f{level}级 &8· &#ff6b6b♥&#8ee5ee{likes}"
     hint: "&f输入 &#ffda75/ps visit <玩家> &f前去拜访。"
+    prompt-start: "在聊天里输入要搜索的标签，输入 &f取消&e 放弃搜索。"
 
   board:
     clear: "已清空留言板。"

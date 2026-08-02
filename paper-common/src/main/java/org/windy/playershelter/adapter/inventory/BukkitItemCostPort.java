@@ -62,6 +62,32 @@ public final class BukkitItemCostPort implements ItemCostPort {
         return true;
     }
 
+    @Override
+    public List<ItemCost> missingItems(PlayerRef player, List<ItemCost> costs) {
+        Player p = Bukkit.getPlayer(player.uuid());
+        if (p == null) {
+            return List.of();
+        }
+        Map<Material, Integer> amounts = materialAmounts(costs);
+        if (amounts == null) {
+            return List.of();
+        }
+        List<ItemCost> missing = new java.util.ArrayList<>();
+        for (Map.Entry<Material, Integer> e : amounts.entrySet()) {
+            int have = count(p.getInventory(), e.getKey());
+            if (have < e.getValue()) {
+                // 从原始 costs 中找对应 itemId（保留原始 ID 格式）
+                String itemId = costs.stream()
+                        .filter(c -> c.valid() && material(c.itemId()) == e.getKey())
+                        .map(ItemCost::itemId)
+                        .findFirst()
+                        .orElse(e.getKey().getKey().toString());
+                missing.add(new ItemCost(itemId, e.getValue() - have));
+            }
+        }
+        return missing;
+    }
+
     private Map<Material, Integer> materialAmounts(List<ItemCost> costs) {
         Map<Material, Integer> out = new LinkedHashMap<>();
         for (ItemCost cost : costs) {

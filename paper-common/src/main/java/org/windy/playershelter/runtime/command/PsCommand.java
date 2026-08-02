@@ -245,7 +245,9 @@ public final class PsCommand implements TabExecutor {
                     "cost", cost <= 0 || !core.economy().enabled()
                             ? Messages.get("word.free", "免费") : Long.toString((long) cost));
             if (!items.isEmpty()) {
-                Messages.plainKey(p, "info.upgrade-items", "&7升级材料：&f{items}", "items", formatItems(items));
+                Messages.plainComponent(p,
+                        Messages.formatComponent("info.upgrade-items", "&7升级材料：&f{items}",
+                                "items", formatItemsComponent(items)));
             }
         } else if (permCap >= 0 && s.level() >= permCap && !s.isMaxLevel()) {
             Messages.plainKey(p, "info.permission-cap", "&7已达权限上限 &f{level}&7 级（升更高需更高 playershelter.maxlevel 权限）。",
@@ -274,8 +276,15 @@ public final class PsCommand implements TabExecutor {
         }
         ShelterService.UpgradeResult r = core.shelters().upgrade(PlayerRef.of(p.getUniqueId()));
         switch (r) {
-            case NO_MATERIALS -> Messages.errorKey(p, "upgrade.no-materials", "升级材料不足，无法升级。");
-            case OK -> {
+            case ShelterService.UpgradeResult.NoMaterials m -> {
+                net.kyori.adventure.text.Component required = formatItemsComponent(m.required());
+                net.kyori.adventure.text.Component missing = formatItemsComponent(m.missing());
+                Messages.sendComponent(p, org.bukkit.ChatColor.RED,
+                        Messages.formatComponent("upgrade.no-materials",
+                                "升级材料不足，无法升级。\n&7需要：&f{required}\n&7缺少：&c{missing}",
+                                "required", required, "missing", missing));
+            }
+            case ShelterService.UpgradeResult.Ok ok -> {
                 Shelter s = core.repo().find(PlayerRef.of(p.getUniqueId())).orElseThrow();
                 Bukkit.getPluginManager().callEvent(new ShelterUpgradeEvent(
                         p.getUniqueId(), s.worldName(), s.level(), s.borderSize()));
@@ -283,9 +292,14 @@ public final class PsCommand implements TabExecutor {
                         "升级成功！现在是 {level} 级，可用地块边长 {chunks} chunk（{blocks} 格）。",
                         "level", s.level(), "chunks", s.sideChunks(), "blocks", s.borderSize());
             }
-            case MAX_LEVEL -> Messages.warnKey(p, "upgrade.max-level", "你的庇护所已经满级了。");
-            case NO_FUNDS -> Messages.errorKey(p, "upgrade.no-funds", "余额不足，无法升级。");
-            case NO_SHELTER -> Messages.errorKey(p, "no-shelter", "你还没有庇护所。");
+            case ShelterService.UpgradeResult.MaxLevel ignored ->
+                Messages.warnKey(p, "upgrade.max-level", "你的庇护所已经满级了。");
+            case ShelterService.UpgradeResult.NoFunds f ->
+                Messages.errorKey(p, "upgrade.no-funds",
+                        "余额不足，无法升级。\n&7需要：&f{cost}&7，当前余额：&c{balance}",
+                        "cost", String.format("%.2f", f.cost()), "balance", String.format("%.2f", f.balance()));
+            case ShelterService.UpgradeResult.NoShelter ignored ->
+                Messages.errorKey(p, "no-shelter", "你还没有庇护所。");
         }
     }
 
@@ -294,11 +308,40 @@ public final class PsCommand implements TabExecutor {
      * 没有任何此类节点返回 {@code -1}（不额外限制，用 config {@code level.max} 兜底）。
      * 用 {@link Player#getEffectivePermissions()} 枚举，兼容 LuckPerms 等权限组授予（不依赖 plugin.yml 预声明）。
      */
+    /** 兼容旧调用（info 命令等），用可读材料名。 */
     private static String formatItems(List<ItemCost> items) {
         return items.stream()
                 .filter(ItemCost::valid)
-                .map(i -> i.itemId() + " x" + i.amount())
+                .map(i -> materialName(i.itemId()) + " ×" + i.amount())
                 .collect(Collectors.joining(", "));
+    }
+
+    /** Component 版：材料名用 Paper 翻译键（客户端语言包自动翻译）。 */
+    private static net.kyori.adventure.text.Component formatItemsComponent(List<ItemCost> items) {
+        if (items.isEmpty()) {
+            return Messages.component(Messages.get("gui.items-empty", "无"));
+        }
+        return net.kyori.adventure.text.Component.join(
+                net.kyori.adventure.text.JoinConfiguration.separator(Messages.component("&7, ")),
+                items.stream()
+                        .filter(ItemCost::valid)
+                        .map(i -> {
+                            org.bukkit.Material mat = org.bukkit.Material.matchMaterial(i.itemId());
+                            net.kyori.adventure.text.Component name = mat != null
+                                    ? net.kyori.adventure.text.Component.translatable(mat.translationKey())
+                                    : Messages.component("&f" + i.itemId());
+                            return name.append(Messages.component("&7×" + i.amount()));
+                        })
+                        .toList()
+        );
+    }
+
+    /** 获取材料的可读名称（legacy 字符串用）：兜底用 Material 英文名或原始 ID。 */
+    private static String materialName(String itemId) {
+        if (itemId == null || itemId.isBlank()) return itemId;
+        org.bukkit.Material mat = org.bukkit.Material.matchMaterial(itemId);
+        if (mat == null) return itemId;
+        return mat.name().replace('_', ' ').toLowerCase(java.util.Locale.ROOT);
     }
 
     private int permissionMaxLevel(Player p) {

@@ -18,6 +18,7 @@ import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.windy.playershelter.adapter.limit.ShelterCensus;
 import org.windy.playershelter.api.event.ShelterVisitEvent;
 import org.windy.playershelter.domain.model.ItemCost;
@@ -38,6 +39,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Locale;
@@ -107,10 +109,10 @@ public final class ControllerGui implements Listener {
         File file = menuFile(safeMenu);
         YamlConfiguration yaml = YamlConfiguration.loadConfiguration(file);
         int size = Math.max(9, Math.min(54, ((yaml.getInt("size", 54) + 8) / 9) * 9));
-        String title = apply(yaml.getString("title", "&0庇护所控制器"), player, shelter);
+        net.kyori.adventure.text.Component title = applyComponent(yaml.getString("title", "&0庇护所控制器"), player, shelter);
 
         Holder holder = new Holder(shelter);
-        Inventory inv = Bukkit.createInventory(holder, size, Messages.component(title));
+        Inventory inv = Bukkit.createInventory(holder, size, title);
         holder.inventory = inv;
 
         Material pane = material(yaml.getString("pane-material", "GRAY_STAINED_GLASS_PANE"), Material.GRAY_STAINED_GLASS_PANE);
@@ -133,12 +135,12 @@ public final class ControllerGui implements Listener {
                     continue;
                 }
                 Material mat = material(sec.getString("material", "STONE"), Material.STONE);
-                String name = apply(sec.getString("name", key), player, shelter);
-                List<String> lore = new ArrayList<>();
+                net.kyori.adventure.text.Component name = applyComponent(sec.getString("name", key), player, shelter);
+                List<net.kyori.adventure.text.Component> lore = new ArrayList<>();
                 for (String line : sec.getStringList("lore")) {
-                    lore.add(apply(line, player, shelter));
+                    lore.add(applyComponent(line, player, shelter));
                 }
-                inv.setItem(slot, item(mat, name, lore));
+                inv.setItem(slot, itemComponent(mat, name, lore));
                 holder.actions.put(slot, apply(sec.getString("action", ""), player, shelter));
             }
         }
@@ -258,71 +260,132 @@ public final class ControllerGui implements Listener {
         Bukkit.getScheduler().runTask(core.plugin(), () -> handlePrompt(player, prompt, text));
     }
 
-    private String apply(String s, Player player, Shelter shelter) {
+    /** 将含 legacy 颜色码 + {placeholder} 的模板转为 Component（支持 Paper 翻译键）。 */
+    private net.kyori.adventure.text.Component applyComponent(String s, Player player, Shelter shelter) {
         double nextCost = shelter.isMaxLevel() ? 0 : core.config().upgradeCost(shelter.level());
         List<ItemCost> nextItems = shelter.isMaxLevel() ? List.of() : core.config().upgradeItems(shelter.level());
         int nextLevel = Math.min(shelter.level() + 1, shelter.layout().maxLevel());
         Shelter nextShelter = shelter.withLevel(nextLevel);
-        String bulletin = shelter.bulletin().isBlank() ? "未设置" : shelter.bulletin();
+        String bulletin = shelter.bulletin().isBlank()
+                ? Messages.get("gui.bulletin-default", "未设置") : shelter.bulletin();
         if (bulletin.length() > 24) {
             bulletin = bulletin.substring(0, 24) + "…";
         }
         String ownerName = ownerName(shelter);
         LimitView limits = limitView(shelter);
-        String out = s
-                .replace("{player}", player.getName())
-                .replace("{owner}", ownerName)
-                .replace("{level}", String.valueOf(shelter.level()))
-                .replace("{max_level}", String.valueOf(shelter.layout().maxLevel()))
-                .replace("{border}", String.valueOf(shelter.borderSize()))
-                .replace("{next_border}", String.valueOf(shelter.layout().borderSizeAtLevel(shelter.level() + 1)))
-                .replace("{side_chunks}", String.valueOf(shelter.sideChunks()))
-                .replace("{area_chunks}", String.valueOf(shelter.areaChunks()))
-                .replace("{next_side_chunks}", String.valueOf(shelter.nextSideChunks()))
-                .replace("{max_chunks}", String.valueOf(shelter.layout().maxChunks()))
-                .replace("{plot_size}", shelter.sideChunks() + "x" + shelter.sideChunks())
-                .replace("{next_plot_size}", shelter.nextSideChunks() + "x" + shelter.nextSideChunks())
-                .replace("{visibility}", shelter.visibility().name().toLowerCase())
-                .replace("{visibility_label}", visibilityLabel(shelter))
-                .replace("{likes}", String.valueOf(shelter.likes()))
-                .replace("{admins}", String.valueOf(shelter.admins().size()))
-                .replace("{admin_cap}", String.valueOf(core.config().adminCapAt(shelter.level())))
-                .replace("{next_admin_cap}", String.valueOf(core.config().adminCapAt(nextLevel)))
-                .replace("{trusted}", String.valueOf(shelter.trusted().size()))
-                .replace("{trust_cap}", String.valueOf(core.config().trustCapAt(shelter.level())))
-                .replace("{next_trust_cap}", String.valueOf(core.config().trustCapAt(nextLevel)))
-                .replace("{access}", String.valueOf(shelter.access().size()))
-                .replace("{denied}", String.valueOf(shelter.denied().size()))
-                .replace("{upgrade_cost}", nextCost <= 0 ? "免费" : String.format("%.2f", nextCost))
-                .replace("{upgrade_items}", formatItems(nextItems))
-                .replace("{upgrade_state}", shelter.isMaxLevel() ? "已满级" : "可升级")
-                .replace("{upgrade_hint}", shelter.isMaxLevel() ? "当前已到等级上限，点击只会收到提示。"
-                        : "点击按钮执行升级。")
-                .replace("{next_mob_cap}", String.valueOf(core.limits().mobCap(nextShelter)))
-                .replace("{next_tile_cap}", String.valueOf(core.limits().tileCap(nextShelter)))
-                .replace("{next_drop_cap}", String.valueOf(core.limits().dropCap(nextShelter)))
-                .replace("{next_vehicle_cap}", String.valueOf(core.limits().vehicleCap(nextShelter)))
-                .replace("{bulletin}", bulletin)
-                .replace("{limits_state}", limits.state())
-                .replace("{mobs}", limits.mobs())
-                .replace("{mob_cap}", limits.mobCap())
-                .replace("{tiles}", limits.tiles())
-                .replace("{tile_cap}", limits.tileCap())
-                .replace("{drops}", limits.drops())
-                .replace("{drop_cap}", limits.dropCap())
-                .replace("{vehicles}", limits.vehicles())
-                .replace("{vehicle_cap}", limits.vehicleCap())
-                .replace("{world}", shelter.worldName())
-                .replace("{flags_on}", String.valueOf(enabledFlagCount(shelter)))
-                .replace("{flags_total}", String.valueOf(Flag.values().length));
-        out = replaceFlagPlaceholders(out, shelter);
-        if (out.contains("{tags_count}")) {
-            out = out.replace("{tags_count}", String.valueOf(core.tags().tagsOf(shelter.owner()).size()));
+
+        // 先把模板中的颜色码统一为 § 前缀，再按 { 切分
+        String colored = Messages.color(s);
+
+        // 普通文本占位符映射
+        Map<String, String> textReplacements = new LinkedHashMap<>();
+        textReplacements.put("{player}", player.getName());
+        textReplacements.put("{owner}", ownerName);
+        textReplacements.put("{level}", String.valueOf(shelter.level()));
+        textReplacements.put("{max_level}", String.valueOf(shelter.layout().maxLevel()));
+        textReplacements.put("{border}", String.valueOf(shelter.borderSize()));
+        textReplacements.put("{next_border}", String.valueOf(shelter.layout().borderSizeAtLevel(shelter.level() + 1)));
+        textReplacements.put("{side_chunks}", String.valueOf(shelter.sideChunks()));
+        textReplacements.put("{area_chunks}", String.valueOf(shelter.areaChunks()));
+        textReplacements.put("{next_side_chunks}", String.valueOf(shelter.nextSideChunks()));
+        textReplacements.put("{max_chunks}", String.valueOf(shelter.layout().maxChunks()));
+        textReplacements.put("{plot_size}", shelter.sideChunks() + "x" + shelter.sideChunks());
+        textReplacements.put("{next_plot_size}", shelter.nextSideChunks() + "x" + shelter.nextSideChunks());
+        textReplacements.put("{visibility}", shelter.visibility().name().toLowerCase());
+        textReplacements.put("{visibility_label}", visibilityLabel(shelter));
+        textReplacements.put("{likes}", String.valueOf(shelter.likes()));
+        textReplacements.put("{admins}", String.valueOf(shelter.admins().size()));
+        textReplacements.put("{admin_cap}", String.valueOf(core.config().adminCapAt(shelter.level())));
+        textReplacements.put("{next_admin_cap}", String.valueOf(core.config().adminCapAt(nextLevel)));
+        textReplacements.put("{trusted}", String.valueOf(shelter.trusted().size()));
+        textReplacements.put("{trust_cap}", String.valueOf(core.config().trustCapAt(shelter.level())));
+        textReplacements.put("{next_trust_cap}", String.valueOf(core.config().trustCapAt(nextLevel)));
+        textReplacements.put("{access}", String.valueOf(shelter.access().size()));
+        textReplacements.put("{denied}", String.valueOf(shelter.denied().size()));
+        textReplacements.put("{upgrade_cost}", nextCost <= 0
+                ? Messages.get("gui.upgrade-cost-free", "免费") : String.format("%.2f", nextCost));
+        textReplacements.put("{upgrade_state}", shelter.isMaxLevel()
+                ? Messages.get("gui.upgrade-state-max", "已满级") : Messages.get("gui.upgrade-state-ready", "可升级"));
+        textReplacements.put("{upgrade_hint}", shelter.isMaxLevel()
+                ? Messages.get("gui.upgrade-hint-max", "当前已到等级上限，点击只会收到提示。")
+                : Messages.get("gui.upgrade-hint-ready", "点击按钮执行升级。"));
+        textReplacements.put("{next_mob_cap}", String.valueOf(core.limits().mobCap(nextShelter)));
+        textReplacements.put("{next_tile_cap}", String.valueOf(core.limits().tileCap(nextShelter)));
+        textReplacements.put("{next_drop_cap}", String.valueOf(core.limits().dropCap(nextShelter)));
+        textReplacements.put("{next_vehicle_cap}", String.valueOf(core.limits().vehicleCap(nextShelter)));
+        textReplacements.put("{bulletin}", bulletin);
+        textReplacements.put("{limits_state}", limits.state());
+        textReplacements.put("{mobs}", limits.mobs());
+        textReplacements.put("{mob_cap}", limits.mobCap());
+        textReplacements.put("{tiles}", limits.tiles());
+        textReplacements.put("{tile_cap}", limits.tileCap());
+        textReplacements.put("{drops}", limits.drops());
+        textReplacements.put("{drop_cap}", limits.dropCap());
+        textReplacements.put("{vehicles}", limits.vehicles());
+        textReplacements.put("{vehicle_cap}", limits.vehicleCap());
+        textReplacements.put("{world}", shelter.worldName());
+        textReplacements.put("{flags_on}", String.valueOf(enabledFlagCount(shelter)));
+        textReplacements.put("{flags_total}", String.valueOf(Flag.values().length));
+        for (Flag flag : Flag.values()) {
+            boolean on = Flags.isOn(shelter, flag);
+            String id = flag.id().replace('-', '_');
+            textReplacements.put("{" + id + "_state}", flagState(on));
+            textReplacements.put("{" + id + "_toggle}", flagToggle(on));
+            textReplacements.put("{" + id + "_next}", flagNext(on));
+            textReplacements.put("{" + id + "_label}", flagDescription(flag));
         }
-        if (out.contains("{board_messages}")) {
-            out = out.replace("{board_messages}", String.valueOf(core.board().count(shelter.owner())));
+        textReplacements.put("{tags_count}", String.valueOf(core.tags().tagsOf(shelter.owner()).size()));
+        textReplacements.put("{board_messages}", String.valueOf(core.board().count(shelter.owner())));
+
+        // Component 级占位符（含 TranslatableComponent，不能序列化为字符串）
+        Map<String, net.kyori.adventure.text.Component> componentReplacements = new LinkedHashMap<>();
+        componentReplacements.put("{upgrade_items}", formatItemsComponent(nextItems));
+
+        // 逐段构建 Component
+        LegacyComponentSerializer legSer = LegacyComponentSerializer.legacySection();
+        net.kyori.adventure.text.Component result = net.kyori.adventure.text.Component.empty();
+        String[] parts = colored.split("\\{", -1);
+        for (int i = 0; i < parts.length; i++) {
+            if (i == 0) {
+                // 第一段不含 {
+                if (!parts[i].isEmpty()) {
+                    result = result.append(legSer.deserialize(parts[i]));
+                }
+                continue;
+            }
+            // parts[i] = "key}剩余文本..."
+            int close = parts[i].indexOf('}');
+            if (close < 0) {
+                // 没有闭合的 {，当作纯文本
+                result = result.append(legSer.deserialize("{" + parts[i]));
+                continue;
+            }
+            String key = "{" + parts[i].substring(0, close) + "}";
+            String rest = parts[i].substring(close + 1);
+
+            net.kyori.adventure.text.Component replacement = componentReplacements.get(key);
+            if (replacement != null) {
+                result = result.append(replacement);
+            } else {
+                String textVal = textReplacements.get(key);
+                if (textVal != null) {
+                    result = result.append(Messages.component(textVal));
+                } else {
+                    // 未识别的占位符，原样保留
+                    result = result.append(Messages.component(key));
+                }
+            }
+            if (!rest.isEmpty()) {
+                result = result.append(legSer.deserialize(rest));
+            }
         }
-        return out;
+        return result;
+    }
+
+    /** 旧版字符串 apply（给不需要 TranslatableComponent 的场景用，如标签 GUI）。 */
+    private String apply(String s, Player player, Shelter shelter) {
+        return net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.legacySection()
+                .serialize(applyComponent(s, player, shelter));
     }
 
     private String replaceFlagPlaceholders(String s, Shelter shelter) {
@@ -340,7 +403,7 @@ public final class ControllerGui implements Listener {
     }
 
     private static String flagState(boolean on) {
-        return on ? "&a开" : "&c关";
+        return on ? Messages.get("gui.flag-on", "&a开") : Messages.get("gui.flag-off", "&c关");
     }
 
     private static String flagToggle(boolean on) {
@@ -348,14 +411,14 @@ public final class ControllerGui implements Listener {
     }
 
     private static String flagNext(boolean on) {
-        return on ? "关" : "开";
+        return on ? Messages.get("gui.flag-next-off", "关") : Messages.get("gui.flag-next-on", "开");
     }
 
     private static String visibilityLabel(Shelter shelter) {
         return switch (shelter.visibility()) {
-            case PRIVATE -> "私密";
-            case FRIENDS -> "好友";
-            case PUBLIC -> "公开";
+            case PRIVATE -> Messages.get("gui.visibility-private", "私密");
+            case FRIENDS -> Messages.get("gui.visibility-friends", "好友");
+            case PUBLIC -> Messages.get("gui.visibility-public", "公开");
         };
     }
 
@@ -448,8 +511,8 @@ public final class ControllerGui implements Listener {
         }
 
         if (tags.isEmpty()) {
-            inv.setItem(22, item(Material.LIGHT_GRAY_DYE, "&7暂无标签",
-                    List.of("&8点击“新增标签”来添加第一个标签。")));
+            inv.setItem(22, item(Material.LIGHT_GRAY_DYE, Messages.get("gui.tags-empty", "&7暂无标签"),
+                    List.of(Messages.get("gui.tags-empty-hint", "&8点击\"新增标签\"来添加第一个标签。"))));
         }
 
         OPEN.put(player.getUniqueId(), holder);
@@ -457,7 +520,8 @@ public final class ControllerGui implements Listener {
     }
 
     private ItemStack tagItem(String tag) {
-        return item(Material.NAME_TAG, "&f#" + tag, List.of("&8点击移除这条标签。"));
+        return item(Material.NAME_TAG, "&f#" + tag,
+                List.of(Messages.get("gui.tags-remove-hint", "&8点击移除这条标签。")));
     }
 
     private void removeTag(Player player, String rawTag) {
@@ -544,14 +608,17 @@ public final class ControllerGui implements Listener {
         }
 
         if (page > 1) {
-            inv.setItem(45, item(Material.ARROW, "&f上一页", List.of("&7第 &f" + (page - 1) + " &7页")));
+            inv.setItem(45, item(Material.ARROW, Messages.get("gui.page-prev", "&f上一页"),
+                    List.of(Messages.format("gui.page-prev-lore", "&7第 &f{page} &7页", "page", page - 1))));
             holder.actions.put(45, "tagresult:" + (page - 1));
         }
         if (page < maxPage) {
-            inv.setItem(53, item(Material.ARROW, "&f下一页", List.of("&7第 &f" + (page + 1) + " &7页")));
+            inv.setItem(53, item(Material.ARROW, Messages.get("gui.page-next", "&f下一页"),
+                    List.of(Messages.format("gui.page-next-lore", "&7第 &f{page} &7页", "page", page + 1))));
             holder.actions.put(53, "tagresult:" + (page + 1));
         }
-        inv.setItem(49, item(Material.ARROW, "&f返回", List.of("&7回到标签页。")));
+        inv.setItem(49, item(Material.ARROW, Messages.get("gui.page-back", "&f返回"),
+                List.of(Messages.get("gui.page-back-lore-tag", "&7回到标签页。"))));
         holder.actions.put(49, "menu:tags");
 
         OPEN.put(player.getUniqueId(), holder);
@@ -618,14 +685,17 @@ public final class ControllerGui implements Listener {
         }
 
         if (page > 1) {
-            inv.setItem(45, item(Material.ARROW, "&f上一页", List.of("&7第 &f" + (page - 1) + " &7页")));
+            inv.setItem(45, item(Material.ARROW, Messages.get("gui.page-prev", "&f上一页"),
+                    List.of(Messages.format("gui.page-prev-lore", "&7第 &f{page} &7页", "page", page - 1))));
             holder.actions.put(45, "directory:" + req.sort().name().toLowerCase(Locale.ROOT) + ":" + (page - 1));
         }
         if (page < maxPage) {
-            inv.setItem(53, item(Material.ARROW, "&f下一页", List.of("&7第 &f" + (page + 1) + " &7页")));
+            inv.setItem(53, item(Material.ARROW, Messages.get("gui.page-next", "&f下一页"),
+                    List.of(Messages.format("gui.page-next-lore", "&7第 &f{page} &7页", "page", page + 1))));
             holder.actions.put(53, "directory:" + req.sort().name().toLowerCase(Locale.ROOT) + ":" + (page + 1));
         }
-        inv.setItem(49, item(Material.ARROW, "&f返回", List.of("&7回到社交页。")));
+        inv.setItem(49, item(Material.ARROW, Messages.get("gui.page-back", "&f返回"),
+                List.of(Messages.get("gui.page-back-lore-directory", "&7回到社交页。"))));
         holder.actions.put(49, "menu:social");
 
         OPEN.put(player.getUniqueId(), holder);
@@ -635,14 +705,16 @@ public final class ControllerGui implements Listener {
     private ItemStack directoryItem(Shelter target) {
         String name = ownerName(target);
         List<String> lore = new ArrayList<>();
-        lore.add("&7等级: &f" + target.level());
-        lore.add("&7点赞: &f" + target.likes());
-        lore.add("&7可见性: &f" + target.visibility().name().toLowerCase(Locale.ROOT));
+        lore.add(Messages.format("gui.directory-lore-level", "&7等级: &f{level}", "level", target.level()));
+        lore.add(Messages.format("gui.directory-lore-likes", "&7点赞: &f{likes}", "likes", target.likes()));
+        lore.add(Messages.format("gui.directory-lore-visibility", "&7可见性: &f{visibility}",
+                "visibility", target.visibility().name().toLowerCase(Locale.ROOT)));
         if (!target.bulletin().isBlank()) {
-            lore.add("&7公告: &f" + trim(target.bulletin(), 24));
+            lore.add(Messages.format("gui.directory-lore-bulletin", "&7公告: &f{bulletin}",
+                    "bulletin", trim(target.bulletin(), 24)));
         }
         lore.add("");
-        lore.add("&8左键拜访。");
+        lore.add(Messages.get("gui.directory-visit-hint", "&8左键拜访。"));
         return item(Material.PLAYER_HEAD, "&f" + name, lore);
     }
 
@@ -704,10 +776,10 @@ public final class ControllerGui implements Listener {
 
     private static String sortLabel(DirectoryPort.Sort sort) {
         return switch (sort) {
-            case LIKES -> "点赞";
-            case HOT -> "热门";
-            case RANDOM -> "随机";
-            case NEWEST -> "最新";
+            case LIKES -> Messages.get("gui.sort-likes", "点赞");
+            case HOT -> Messages.get("gui.sort-hot", "热门");
+            case RANDOM -> Messages.get("gui.sort-random", "随机");
+            case NEWEST -> Messages.get("gui.sort-newest", "最新");
         };
     }
 
@@ -745,7 +817,8 @@ public final class ControllerGui implements Listener {
 
     private LimitView limitView(Shelter shelter) {
         if (!core.limits().enabled()) {
-            return new LimitView("已关闭", "-", "-", "-", "-", "-", "-", "-", "-");
+            return new LimitView(Messages.get("gui.limits-disabled", "已关闭"),
+                    "-", "-", "-", "-", "-", "-", "-", "-");
         }
         String mobCap = String.valueOf(core.limits().mobCap(shelter));
         String tileCap = String.valueOf(core.limits().tileCap(shelter));
@@ -753,11 +826,14 @@ public final class ControllerGui implements Listener {
         String vehicleCap = String.valueOf(core.limits().vehicleCap(shelter));
         World world = Bukkit.getWorld(shelter.worldName());
         if (world == null) {
-            return new LimitView("世界未加载", "未加载", mobCap, "未加载", tileCap,
-                    "未加载", dropCap, "未加载", vehicleCap);
+            String notLoaded = Messages.get("gui.limits-not-loaded", "未加载");
+            return new LimitView(Messages.get("gui.limits-unloaded", "世界未加载"),
+                    notLoaded, mobCap, notLoaded, tileCap,
+                    notLoaded, dropCap, notLoaded, vehicleCap);
         }
         ShelterCensus.Census census = core.limits().census().countCached(world);
-        return new LimitView("实时统计", String.valueOf(census.mobs()), mobCap,
+        return new LimitView(Messages.get("gui.limits-live", "实时统计"),
+                String.valueOf(census.mobs()), mobCap,
                 String.valueOf(census.tiles()), tileCap,
                 String.valueOf(census.drops()), dropCap,
                 String.valueOf(census.vehicles()), vehicleCap);
@@ -841,14 +917,14 @@ public final class ControllerGui implements Listener {
 
     private ItemStack boardMessageItem(MessageBoardStore.Message message) {
         List<String> lore = new ArrayList<>();
-        lore.add("&7作者: &f" + safe(message.authorName(), "?"));
-        lore.add("&7时间: &f" + BOARD_TIME.format(Instant.ofEpochMilli(message.createdAt())));
-        lore.add("&7编号: &f" + message.id());
+        lore.add(Messages.format("gui.board-author", "&7作者: &f{author}", "author", safe(message.authorName(), "?")));
+        lore.add(Messages.format("gui.board-time", "&7时间: &f{time}", "time", BOARD_TIME.format(Instant.ofEpochMilli(message.createdAt()))));
+        lore.add(Messages.format("gui.board-number", "&7编号: &f{id}", "id", message.id()));
         lore.add("");
         lore.addAll(wrap("&f" + safe(message.text(), ""), 24, 4));
         lore.add("");
-        lore.add("&8左键删除这条留言。");
-        return item(Material.PAPER, "&f留言 #" + message.id(), lore);
+        lore.add(Messages.get("gui.board-delete-hint", "&8左键删除这条留言。"));
+        return item(Material.PAPER, Messages.format("gui.board-item-prefix", "&f留言 #{id}", "id", message.id()), lore);
     }
 
     private void deleteBoardMessage(Player player, String data) {
@@ -913,7 +989,7 @@ public final class ControllerGui implements Listener {
             out.add(text.substring(start, end));
         }
         if (out.isEmpty()) {
-            out.add("&7(空)");
+            out.add(Messages.get("gui.empty-slot", "&7(空)"));
         } else if (text.length() > width * maxLines) {
             int last = out.size() - 1;
             out.set(last, out.get(last) + "...");
@@ -1032,14 +1108,33 @@ public final class ControllerGui implements Listener {
         return t;
     }
 
-    private static String formatItems(List<ItemCost> items) {
+    /**
+     * 格式化材料列表为 Component：材料名使用 Paper 翻译键（客户端语言包自动翻译），
+     * 数量以 "×N" 显示。
+     */
+    private static net.kyori.adventure.text.Component formatItemsComponent(List<ItemCost> items) {
         if (items.isEmpty()) {
-            return "无";
+            return Messages.component(Messages.get("gui.items-empty", "无"));
         }
-        return items.stream()
-                .filter(ItemCost::valid)
-                .map(i -> i.itemId() + " x" + i.amount())
-                .collect(java.util.stream.Collectors.joining(", "));
+        return net.kyori.adventure.text.Component.join(
+                net.kyori.adventure.text.JoinConfiguration.separator(
+                        Messages.component("&7, ")),
+                items.stream()
+                        .filter(ItemCost::valid)
+                        .map(i -> {
+                            Material mat = Material.matchMaterial(i.itemId());
+                            net.kyori.adventure.text.Component name = mat != null
+                                    ? net.kyori.adventure.text.Component.translatable(mat.translationKey())
+                                    : Messages.component("&f" + i.itemId());
+                            return name.append(Messages.component("&7×" + i.amount()));
+                        })
+                        .toList()
+        );
+    }
+
+    /** 兼容旧调用：序列化为 legacy 字符串。 */
+    private static String formatItems(List<ItemCost> items) {
+        return PlainTextComponentSerializer.plainText().serialize(formatItemsComponent(items));
     }
 
     private static ItemStack named(Material material, String name) {
@@ -1052,6 +1147,19 @@ public final class ControllerGui implements Listener {
         if (meta != null) {
             meta.displayName(Messages.component(name));
             meta.lore(lore.stream().map(Messages::component).toList());
+            stack.setItemMeta(meta);
+        }
+        return stack;
+    }
+
+    /** Component 版 item 构造（保留 TranslatableComponent，材料名由客户端翻译）。 */
+    private static ItemStack itemComponent(Material material, net.kyori.adventure.text.Component name,
+                                           List<net.kyori.adventure.text.Component> lore) {
+        ItemStack stack = new ItemStack(material);
+        ItemMeta meta = stack.getItemMeta();
+        if (meta != null) {
+            meta.displayName(name);
+            meta.lore(lore);
             stack.setItemMeta(meta);
         }
         return stack;

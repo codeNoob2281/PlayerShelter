@@ -49,4 +49,10 @@ public final class VaultEconomy implements EconomyPort {
         OfflinePlayer op = Bukkit.getOfflinePlayer(player.uuid());
         return economy.withdrawPlayer(op, amount).transactionSuccess();
     }
+
+    @Override
+    public double balance(PlayerRef player) {
+        OfflinePlayer op = Bukkit.getOfflinePlayer(player.uuid());
+        return economy.getBalance(op);
+    }
 }
