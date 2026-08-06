@@ -140,11 +140,6 @@ public final class PaperWorldControl implements WorldControl {
             throw new IllegalStateException("createWorld 返回 null: " + name);
         }
 
-        // 1.21 注册表：取消常加载
-        GameRule<Integer> spawnRadius = GameRule.SPAWN_CHUNK_RADIUS;
-        if (spawnRadius != null) {
-            world.setGameRule(spawnRadius, 0);
-        }
         applyPaperWorldTuning(world);
 
         world.setSpawnFlags(true, true);
@@ -225,11 +220,6 @@ public final class PaperWorldControl implements WorldControl {
             }
             Bukkit.getScheduler().runTask(plugin, () -> {
 
-                // 1.21 注册表：取消常加载
-                GameRule<Integer> spawnRadius = GameRule.SPAWN_CHUNK_RADIUS;
-                if (spawnRadius != null) {
-                    w.setGameRule(spawnRadius, 0);
-                }
                 applyPaperWorldTuning(w);
 
                 if (freshBuild) {
