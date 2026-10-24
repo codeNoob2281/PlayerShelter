@@ -17,10 +17,22 @@ plugins {
 
 rootProject.name = 'playershelter'
 
-// 一人一世界（个人庇护所）。模块拆分：纯核心 + 共享 Paper 胶水 + 每载体一个薄入口。
+// GuildShelter API：软集成迁移监听器编译期依赖（运行期由 GuildShelter 主插件提供）。
+includeBuild('../GuildShelter') {
+    dependencySubstitution {
+        substitute(module('org.windy:guildshelter-api')).using(project(':guildshelter-api'))
+    }
+}
+
+// 一人一世界（个人庇护所）。模块拆分同 GuildShelter：纯核心 + 共享 Paper 胶水 + 每载体一个薄入口。
 include 'playershelter-api' // 对外扩展 API（纯接口+DTO+事件，第三方附属 compileOnly）
 include 'core'             // domain · service · persistence（平台无关纯 Java）
 include 'paper-common'     // adapter/** · 接缝接口+Paper 默认实现 · 抽象引导（禁 net.neoforged）
 include 'paper'            // 普通版：纯 Paper 插件 jar
-include 'neoforge_26_2'    // 本地增强版：混合端(NeoForge 26.2)原生接缝 jar
-include 'neoforge_1.21.1'  // 本地增强版：混合端(NeoForge 1.21.1)原生接缝 jar
+// neoforge 载体目录在 .gitignore 里（本地增强版），只在本机存在时纳入构建。
+if (file('neoforge_26_2/build.gradle').exists()) {
+    include 'neoforge_26_2' // 本地增强版：混合端(NeoForge 26.2)原生接缝 jar
+}
+if (file('neoforge_1.21.1/build.gradle').exists()) {
+    include 'neoforge_1.21.1' // 本地增强版：混合端(NeoForge 1.21.1)原生接缝 jar
+}

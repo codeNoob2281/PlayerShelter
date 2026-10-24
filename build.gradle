@@ -30,11 +30,11 @@ subprojects {
         }
         maven {
             url 'https://maven.enginehub.org/repo/'
-            content { includeGroup 'com.sk89q.worldedit' }
+            content { includeGroup 'com.sk89q.worldedit'; includeGroup 'org.enginehub.lin-bus' }
         }
     }
 
-    java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+    java.toolchain.languageVersion = JavaLanguageVersion.of(25)
 
     tasks.withType(JavaCompile).configureEach {
         options.encoding = 'UTF-8'

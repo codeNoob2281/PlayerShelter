@@ -140,6 +140,11 @@ public final class PaperWorldControl implements WorldControl {
             throw new IllegalStateException("createWorld 返回 null: " + name);
         }
 
+        // 1.21 注册表：取消常加载
+        GameRule<Integer> spawnRadius = (GameRule<Integer>) lookupGameRule("spawn_chunk_radius");
+        if (spawnRadius != null) {
+            world.setGameRule(spawnRadius, 0);
+        }
         applyPaperWorldTuning(world);
 
         world.setSpawnFlags(true, true);
@@ -220,6 +225,11 @@ public final class PaperWorldControl implements WorldControl {
             }
             Bukkit.getScheduler().runTask(plugin, () -> {
 
+                // 1.21 注册表：取消常加载
+                GameRule<Integer> spawnRadius = (GameRule<Integer>) lookupGameRule("spawn_chunk_radius");
+                if (spawnRadius != null) {
+                    w.setGameRule(spawnRadius, 0);
+                }
                 applyPaperWorldTuning(w);
 
                 if (freshBuild) {
@@ -234,11 +244,37 @@ public final class PaperWorldControl implements WorldControl {
         });
     }
 
+    // 兼容层：26.2 起 gamerule 走注册表 Registry.GAME_RULE；1.21.1 及更早只有 GameRule.getByName（camelCase）。
+    // 反射访问，保证同一份代码在新旧 Paper 上都能编译、运行。
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static GameRule<?> lookupGameRule(String snakeKey) {
+        try {
+            Object reg = Registry.class.getField("GAME_RULE").get(null);
+            Object rule = ((Registry) reg).get(NamespacedKey.minecraft(snakeKey));
+            if (rule instanceof GameRule) {
+                return (GameRule<?>) rule;
+            }
+        } catch (NoSuchFieldException | IllegalAccessException ignored) {
+            // 旧版 Paper：走 GameRule.getByName 兜底
+        }
+        StringBuilder camel = new StringBuilder();
+        boolean upper = false;
+        for (char c : snakeKey.toCharArray()) {
+            if (c == '_') {
+                upper = true;
+                continue;
+            }
+            camel.append(upper ? Character.toUpperCase(c) : c);
+            upper = false;
+        }
+        return GameRule.getByName(camel.toString());
+    }
+
     @SuppressWarnings({"unchecked", "rawtypes"})
     private void applyConfiguredGameRules(World world) {
         for (Map.Entry<String, String> e : gamerules.entrySet()) {
             String key = e.getKey().toLowerCase();
-            GameRule rule = GameRule.getByName(key);
+            GameRule rule = (GameRule) lookupGameRule(key);
             if (rule == null) {
                 log.warning("[PlayerShelter] 未知 gamerule: " + key);
                 continue;
