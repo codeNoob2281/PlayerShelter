@@ -1,0 +1,5 @@
+# 统一行尾：仓库内一律 LF，工作区随平台（防 Windows 编辑器存 CRLF 造成满屏假改动）。
+* text=auto eol=lf
+
+# Windows 批处理保留 CRLF（旧版 cmd 解析需要）。
+*.bat text eol=crlf
