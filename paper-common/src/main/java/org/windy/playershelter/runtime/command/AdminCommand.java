@@ -12,10 +12,14 @@ import org.windy.playershelter.domain.model.Shelter;
 import org.windy.playershelter.domain.model.ShelterLayout;
 import org.windy.playershelter.runtime.Messages;
 import org.windy.playershelter.runtime.PsCore;
+import org.windy.playershelter.service.EntityLimits;
+import org.windy.playershelter.service.ShelterLimits;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 管理员子命令（决策 #61 全套 /ps admin / #72 转让仅管理员）。
@@ -25,7 +29,7 @@ public final class AdminCommand {
 
     private static final List<String> ACTIONS = Arrays.asList(
             "tp", "delete", "setlevel", "setorigin", "origin", "info", "list", "unload", "transfer",
-            "regen", "grant", "disk", "perf", "reload");
+            "regen", "grant", "disk", "perf", "reload", "limit");
 
     private final PsCore core;
 
@@ -61,6 +65,7 @@ public final class AdminCommand {
             case "disk" -> disk(sender);
             case "perf" -> perf(sender);
             case "reload" -> reload(sender);
+            case "limit" -> limit(sender, args);
             default -> Messages.errorKeyOnly(sender, "admin.unknown-action", "action", action);
         }
     }
@@ -123,7 +128,10 @@ public final class AdminCommand {
             return;
         }
         lvl = Math.max(1, Math.min(lvl, s.layout().maxLevel()));
-        Shelter up = s.withLevel(lvl).withAutoUnlockedChunksForLevel();
+        Shelter up = s.withLevel(lvl)
+                .withLimits(ShelterLimits.migrate(s.limits(), s.level(), lvl,
+                        core.limits().entityLimits(), core.config()))
+                .withAutoUnlockedChunksForLevel();
         core.repo().save(up);
         if (core.world().isLoaded(up.worldName())) {
             core.world().applyBorder(up);
@@ -171,7 +179,7 @@ public final class AdminCommand {
                 old.sortedSideLevels(), originX, originZ);
         Shelter moved = new Shelter(s.owner(), s.worldName(), s.seed(), s.genType(), s.level(), layout,
                 s.visibility(), s.admins(), s.trusted(), s.access(), s.denied(), s.flags(), s.bulletin(),
-                s.serverName(), s.createdAt(), s.lastActive(), s.likes());
+                s.serverName(), s.createdAt(), s.lastActive(), s.likes(), s.limits());
 
         core.repo().save(moved);
         if (core.world().isLoaded(moved.worldName())) {
@@ -248,7 +256,7 @@ public final class AdminCommand {
         // 删旧记录，按新主重建记录（世界文件名仍随旧 owner uuid，避免移动存档；只换归属）。
         Shelter moved = new Shelter(PlayerRef.of(newOwner.getUniqueId()), s.worldName(), s.seed(), s.genType(),
                 s.level(), s.layout(), s.visibility(), s.admins(), s.trusted(), s.access(), s.denied(),
-                s.flags(), s.bulletin(), s.serverName(), s.createdAt(), s.lastActive(), s.likes());
+                s.flags(), s.bulletin(), s.serverName(), s.createdAt(), s.lastActive(), s.likes(), s.limits());
         core.repo().delete(s.owner());
         core.repo().save(moved);
         // 转让后旧 owner uuid 的标签/留言成孤儿，清掉（新主重新打标签）。
@@ -289,13 +297,82 @@ public final class AdminCommand {
             return;
         }
         int lvl = Math.max(1, Math.min(s.level() + delta, s.layout().maxLevel()));
-        Shelter up = s.withLevel(lvl).withAutoUnlockedChunksForLevel();
+        Shelter up = s.withLevel(lvl)
+                .withLimits(ShelterLimits.migrate(s.limits(), s.level(), lvl,
+                        core.limits().entityLimits(), core.config()))
+                .withAutoUnlockedChunksForLevel();
         core.repo().save(up);
         if (core.world().isLoaded(up.worldName())) {
             core.world().applyBorder(up);
         }
         Messages.okKeyOnly(sender, "admin.grant-success",
                 "player", args[1], "level", lvl, "chunks", up.sideChunks());
+    }
+
+    /** 限额键 tab 补全候选（固定六项；machine:<id> 前缀由玩家自行输入）。 */
+    static List<String> limitKeys() {
+        return List.of(ShelterLimits.MOBS, ShelterLimits.TILES, ShelterLimits.DROPS,
+                ShelterLimits.VEHICLES, ShelterLimits.ADMIN, ShelterLimits.TRUST);
+    }
+
+    /**
+     * 单条限额调整（限额数值入库）：/ps admin limit <玩家> <键> <set|add> <值>。
+     * 键 = mobs|tiles|drops|vehicles|admin|trust|machine:<方块id>；只改这一个庇护所，不影响 levels.yml 默认值。
+     */
+    private void limit(CommandSender sender, String[] args) {
+        Shelter s = target(sender, args);
+        if (s == null) {
+            return;
+        }
+        if (args.length < 5) {
+            Messages.warnKeyOnly(sender, "admin.limit-usage");
+            return;
+        }
+        String key = args[2].toLowerCase();
+        if (!ShelterLimits.isValidKey(key)) {
+            Messages.errorKeyOnly(sender, "admin.limit-unknown-key", "key", args[2]);
+            return;
+        }
+        String mode = args[3].toLowerCase();
+        if (!mode.equals("set") && !mode.equals("add")) {
+            Messages.warnKeyOnly(sender, "admin.limit-usage");
+            return;
+        }
+        boolean add = mode.equals("add");
+        int value;
+        try {
+            value = Integer.parseInt(args[4]);
+        } catch (NumberFormatException e) {
+            Messages.errorKeyOnly(sender, "admin.limit-number");
+            return;
+        }
+        Map<String, Integer> limits = new HashMap<>(s.limits());
+        // add 以当前生效值为基线（库存缺键时回退配置按级现算值）。
+        int result = Math.max(0, add ? currentLimit(s, key) + value : value);
+        limits.put(key, result);
+        core.repo().save(s.withLimits(limits));
+        Messages.okKeyOnly(sender, "admin.limit-success",
+                "player", args[1], "key", key, "value", result);
+    }
+
+    /** 某项限额的当前生效值：库存值优先，缺键回退 levels.yml 按级配置。 */
+    private int currentLimit(Shelter s, String key) {
+        Integer stored = s.limits().get(key);
+        if (stored != null) {
+            return stored;
+        }
+        EntityLimits el = core.limits().entityLimits();
+        return switch (key) {
+            case ShelterLimits.MOBS -> el.mobCap(s.level());
+            case ShelterLimits.TILES -> el.tileCap(s.level());
+            case ShelterLimits.DROPS -> el.dropCap(s.level());
+            case ShelterLimits.VEHICLES -> el.vehicleCap(s.level());
+            case ShelterLimits.ADMIN -> core.config().adminCapAt(s.level());
+            case ShelterLimits.TRUST -> core.config().trustCapAt(s.level());
+            default -> key.startsWith(ShelterLimits.MACHINE_PREFIX)
+                    ? Math.max(0, el.machineCap(key.substring(ShelterLimits.MACHINE_PREFIX.length()), s.level()))
+                    : 0;
+        };
     }
 
     /** 磁盘占用榜（决策 P4）：列世界存档大小 + 最后活跃，方便清理。异步扫盘避免卡主线程。 */

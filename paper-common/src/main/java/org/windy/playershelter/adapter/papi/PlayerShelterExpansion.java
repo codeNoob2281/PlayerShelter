@@ -77,8 +77,10 @@ public final class PlayerShelterExpansion extends PlaceholderExpansion {
             case "messages" -> String.valueOf(core.board().count(PlayerRef.of(player.getUniqueId())));
             case "admins" -> String.valueOf(s.admins().size());
             case "trusted" -> String.valueOf(s.trusted().size());
-            case "admincap" -> String.valueOf(core.config().adminCapAt(s.level()));
-            case "trustcap" -> String.valueOf(core.config().trustCapAt(s.level()));
+            case "admincap" -> String.valueOf(s.limits().getOrDefault(
+                    org.windy.playershelter.service.ShelterLimits.ADMIN, core.config().adminCapAt(s.level())));
+            case "trustcap" -> String.valueOf(s.limits().getOrDefault(
+                    org.windy.playershelter.service.ShelterLimits.TRUST, core.config().trustCapAt(s.level())));
             case "upgradecost" -> {
                 double c = core.config().upgradeCost(s.level());
                 yield (c <= 0 || !core.economy().enabled()) ? "免费" : String.valueOf((long) c);

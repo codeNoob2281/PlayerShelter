@@ -21,6 +21,7 @@ import org.windy.playershelter.domain.model.ShelterVisibility;
 import org.windy.playershelter.domain.port.RegionMover;
 import org.windy.playershelter.runtime.Messages;
 import org.windy.playershelter.runtime.PsCore;
+import org.windy.playershelter.service.ShelterLimits;
 
 import java.io.File;
 import java.io.IOException;
@@ -601,7 +602,8 @@ public final class PsgsCommand implements CommandExecutor, TabCompleter {
                 shelter.serverName(),
                 shelter.createdAt(),
                 Instant.now(),
-                shelter.likes());
+                shelter.likes(),
+                shelter.limits());
     }
 
     private Shelter buildForcedPsShelter(PlayerRef owner, int requiredSideChunks) {
@@ -626,7 +628,9 @@ public final class PsgsCommand implements CommandExecutor, TabCompleter {
                 "",
                 Instant.now(),
                 Instant.now(),
-                0);
+                0,
+                // 新建的 1 级庇护所：限额初始值取 levels.yml 1 级配置（限额入库）。
+                ShelterLimits.initial(1, core.limits().entityLimits(), core.config()));
     }
 
     private PlayerShelterMigrationRegion regionOf(Shelter shelter, String source) {

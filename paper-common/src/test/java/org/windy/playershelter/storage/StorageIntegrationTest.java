@@ -45,7 +45,7 @@ class StorageIntegrationTest {
             5, 9,
             20, 15));
     private final ShelterConfig config = new ShelterConfig(LAYOUT,
-            10, 8, 30, 7, 12, 2, 3, 3, 0, 1.5, "");
+            10, 8, 30, 7, 12, 2, 3, "");
 
     @BeforeEach
     void setup() throws Exception {
@@ -67,7 +67,8 @@ class StorageIntegrationTest {
     private Shelter sample(UUID owner, ShelterVisibility vis, int level) {
         return new Shelter(PlayerRef.of(owner), "shelter_" + owner, 42L, GenerationType.NATURAL,
                 level, LAYOUT, vis,
-                Set.of(), Set.of(), Set.of(), Set.of(), Map.of(), "", "", Instant.now(), Instant.now(), 0);
+                Set.of(), Set.of(), Set.of(), Set.of(), Map.of(), "", "", Instant.now(), Instant.now(), 0,
+                Map.of());
     }
 
     @Test
@@ -131,11 +132,12 @@ class StorageIntegrationTest {
                 assertTrue(names.contains("side_levels"));
                 assertTrue(names.contains("origin_x"));
                 assertTrue(names.contains("origin_z"));
+                assertTrue(names.contains("limits"));
             }
             try (var c = legacyDb.connection();
                  var rs = c.createStatement().executeQuery("SELECT MAX(version) FROM ps_schema_history")) {
                 assertTrue(rs.next());
-                assertEquals(7, rs.getInt(1));
+                assertEquals(8, rs.getInt(1));
             }
             Shelter legacy = new SqlShelterRepository(legacyDb, log)
                     .find(PlayerRef.of(UUID.fromString("00000000-0000-0000-0000-000000000001")))
@@ -198,6 +200,26 @@ class StorageIntegrationTest {
         assertEquals(81, loaded.areaChunks());
         // 反查世界名。
         assertTrue(repo.findByWorldName("shelter_" + owner).isPresent());
+    }
+
+    @Test
+    void limitsRoundTrip() {
+        // 限额数值入库：写入（含 machine: 键，键里的冒号不应干扰 k=v 解析）→ 读回一致。
+        UUID owner = UUID.randomUUID();
+        Shelter s = sample(owner, ShelterVisibility.PRIVATE, 3)
+                .withLimits(Map.of("mobs", 12, "tiles", 34, "admin", 2, "machine:minecraft:hopper", 7));
+        repo.save(s);
+
+        Shelter loaded = repo.find(PlayerRef.of(owner)).orElseThrow();
+        assertEquals(12, loaded.limits().get("mobs"));
+        assertEquals(34, loaded.limits().get("tiles"));
+        assertEquals(2, loaded.limits().get("admin"));
+        assertEquals(7, loaded.limits().get("machine:minecraft:hopper"));
+
+        // 空 limits（旧数据形态）读写回也是空。
+        UUID legacy = UUID.randomUUID();
+        repo.save(sample(legacy, ShelterVisibility.PRIVATE, 1));
+        assertTrue(repo.find(PlayerRef.of(legacy)).orElseThrow().limits().isEmpty());
     }
 
     @Test

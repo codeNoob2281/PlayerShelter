@@ -32,6 +32,7 @@ import org.windy.playershelter.runtime.flag.Flags;
 import org.windy.playershelter.runtime.Messages;
 import org.windy.playershelter.runtime.PsCore;
 import org.windy.playershelter.runtime.ShelterRouter;
+import org.windy.playershelter.service.ShelterLimits;
 
 import java.io.File;
 import java.time.Instant;
@@ -265,7 +266,9 @@ public final class ControllerGui implements Listener {
         double nextCost = shelter.isMaxLevel() ? 0 : core.config().upgradeCost(shelter.level());
         List<ItemCost> nextItems = shelter.isMaxLevel() ? List.of() : core.config().upgradeItems(shelter.level());
         int nextLevel = Math.min(shelter.level() + 1, shelter.layout().maxLevel());
-        Shelter nextShelter = shelter.withLevel(nextLevel);
+        // 下一级限额预览 = 库存值按升级差值迁移的预演结果（缺键时 = levels.yml 下一级值）。
+        Map<String, Integer> nextLimits = ShelterLimits.migrate(shelter.limits(), shelter.level(), nextLevel,
+                core.limits().entityLimits(), core.config());
         String bulletin = shelter.bulletin().isBlank()
                 ? Messages.get("gui.bulletin-default", "未设置") : shelter.bulletin();
         if (bulletin.length() > 24) {
@@ -295,11 +298,13 @@ public final class ControllerGui implements Listener {
         textReplacements.put("{visibility_label}", visibilityLabel(shelter));
         textReplacements.put("{likes}", String.valueOf(shelter.likes()));
         textReplacements.put("{admins}", String.valueOf(shelter.admins().size()));
-        textReplacements.put("{admin_cap}", String.valueOf(core.config().adminCapAt(shelter.level())));
-        textReplacements.put("{next_admin_cap}", String.valueOf(core.config().adminCapAt(nextLevel)));
+        textReplacements.put("{admin_cap}", String.valueOf(shelter.limits().getOrDefault(
+                ShelterLimits.ADMIN, core.config().adminCapAt(shelter.level()))));
+        textReplacements.put("{next_admin_cap}", String.valueOf(nextLimits.get(ShelterLimits.ADMIN)));
         textReplacements.put("{trusted}", String.valueOf(shelter.trusted().size()));
-        textReplacements.put("{trust_cap}", String.valueOf(core.config().trustCapAt(shelter.level())));
-        textReplacements.put("{next_trust_cap}", String.valueOf(core.config().trustCapAt(nextLevel)));
+        textReplacements.put("{trust_cap}", String.valueOf(shelter.limits().getOrDefault(
+                ShelterLimits.TRUST, core.config().trustCapAt(shelter.level()))));
+        textReplacements.put("{next_trust_cap}", String.valueOf(nextLimits.get(ShelterLimits.TRUST)));
         textReplacements.put("{access}", String.valueOf(shelter.access().size()));
         textReplacements.put("{denied}", String.valueOf(shelter.denied().size()));
         textReplacements.put("{upgrade_cost}", nextCost <= 0
@@ -309,10 +314,10 @@ public final class ControllerGui implements Listener {
         textReplacements.put("{upgrade_hint}", shelter.isMaxLevel()
                 ? Messages.get("gui.upgrade-hint-max", "当前已到等级上限，点击只会收到提示。")
                 : Messages.get("gui.upgrade-hint-ready", "点击按钮执行升级。"));
-        textReplacements.put("{next_mob_cap}", String.valueOf(core.limits().mobCap(nextShelter)));
-        textReplacements.put("{next_tile_cap}", String.valueOf(core.limits().tileCap(nextShelter)));
-        textReplacements.put("{next_drop_cap}", String.valueOf(core.limits().dropCap(nextShelter)));
-        textReplacements.put("{next_vehicle_cap}", String.valueOf(core.limits().vehicleCap(nextShelter)));
+        textReplacements.put("{next_mob_cap}", String.valueOf(nextLimits.get(ShelterLimits.MOBS)));
+        textReplacements.put("{next_tile_cap}", String.valueOf(nextLimits.get(ShelterLimits.TILES)));
+        textReplacements.put("{next_drop_cap}", String.valueOf(nextLimits.get(ShelterLimits.DROPS)));
+        textReplacements.put("{next_vehicle_cap}", String.valueOf(nextLimits.get(ShelterLimits.VEHICLES)));
         textReplacements.put("{bulletin}", bulletin);
         textReplacements.put("{limits_state}", limits.state());
         textReplacements.put("{mobs}", limits.mobs());

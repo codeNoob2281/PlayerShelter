@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class WorldLifecycleServiceTest {
 
     private final ShelterConfig config = new ShelterConfig(new ShelterLayout(64, 16, 50),
-            10, 8, 30, 7, 12, 2, 3, 3, 0, 1.5, "");
+            10, 8, 30, 7, 12, 2, 3, "");
 
     /** 不调度的假调度器（测试只验判定逻辑，不跑 tick）。 */
     private final SchedulerPort noop = new SchedulerPort() {
@@ -37,7 +37,7 @@ class WorldLifecycleServiceTest {
         return new Shelter(owner, "shelter_" + owner.uuid(), 1L, GenerationType.NATURAL,
                 1, new ShelterLayout(64, 16, 50), org.windy.playershelter.domain.model.ShelterVisibility.PRIVATE,
                 java.util.Set.of(), java.util.Set.of(), java.util.Set.of(), java.util.Set.of(),
-                java.util.Map.of(), "", "", when, when, 0);
+                java.util.Map.of(), "", "", when, when, 0, java.util.Map.of());
     }
 
     @Test

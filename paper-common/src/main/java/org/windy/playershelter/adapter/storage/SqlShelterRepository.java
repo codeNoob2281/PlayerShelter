@@ -69,18 +69,18 @@ public final class SqlShelterRepository implements ShelterRepository {
     public void save(Shelter s) {
         // upsert 主表 + 全量重写成员表（成员量小，简单稳妥）。
         String upsert = db.isSqlite()
-                ? "INSERT INTO ps_shelter(owner_uuid,world_name,seed,gen_type,level,start_border,growth_per_level,max_level,initial_chunks,max_chunks,side_levels,origin_x,origin_z,visibility,flags,bulletin,server_name,created_at,last_active,likes) " +
-                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) " +
+                ? "INSERT INTO ps_shelter(owner_uuid,world_name,seed,gen_type,level,start_border,growth_per_level,max_level,initial_chunks,max_chunks,side_levels,origin_x,origin_z,visibility,flags,limits,bulletin,server_name,created_at,last_active,likes) " +
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) " +
                 "ON CONFLICT(owner_uuid) DO UPDATE SET world_name=excluded.world_name,seed=excluded.seed,gen_type=excluded.gen_type,level=excluded.level," +
                 "start_border=excluded.start_border,growth_per_level=excluded.growth_per_level,max_level=excluded.max_level," +
                 "initial_chunks=excluded.initial_chunks,max_chunks=excluded.max_chunks,side_levels=excluded.side_levels,origin_x=excluded.origin_x,origin_z=excluded.origin_z,visibility=excluded.visibility," +
-                "flags=excluded.flags,bulletin=excluded.bulletin,server_name=excluded.server_name,created_at=excluded.created_at,last_active=excluded.last_active,likes=excluded.likes"
-                : "INSERT INTO ps_shelter(owner_uuid,world_name,seed,gen_type,level,start_border,growth_per_level,max_level,initial_chunks,max_chunks,side_levels,origin_x,origin_z,visibility,flags,bulletin,server_name,created_at,last_active,likes) " +
-                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) " +
+                "flags=excluded.flags,limits=excluded.limits,bulletin=excluded.bulletin,server_name=excluded.server_name,created_at=excluded.created_at,last_active=excluded.last_active,likes=excluded.likes"
+                : "INSERT INTO ps_shelter(owner_uuid,world_name,seed,gen_type,level,start_border,growth_per_level,max_level,initial_chunks,max_chunks,side_levels,origin_x,origin_z,visibility,flags,limits,bulletin,server_name,created_at,last_active,likes) " +
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) " +
                 "ON DUPLICATE KEY UPDATE world_name=VALUES(world_name),seed=VALUES(seed),gen_type=VALUES(gen_type),level=VALUES(level)," +
                 "start_border=VALUES(start_border),growth_per_level=VALUES(growth_per_level),max_level=VALUES(max_level)," +
                 "initial_chunks=VALUES(initial_chunks),max_chunks=VALUES(max_chunks),side_levels=VALUES(side_levels),origin_x=VALUES(origin_x),origin_z=VALUES(origin_z),visibility=VALUES(visibility)," +
-                "flags=VALUES(flags),bulletin=VALUES(bulletin),server_name=VALUES(server_name),created_at=VALUES(created_at),last_active=VALUES(last_active),likes=VALUES(likes)";
+                "flags=VALUES(flags),limits=VALUES(limits),bulletin=VALUES(bulletin),server_name=VALUES(server_name),created_at=VALUES(created_at),last_active=VALUES(last_active),likes=VALUES(likes)";
         try (Connection c = db.connection()) {
             boolean prevAuto = c.getAutoCommit();
             c.setAutoCommit(false);
@@ -101,11 +101,12 @@ public final class SqlShelterRepository implements ShelterRepository {
                     ps.setInt(13, s.layout().originZ()); // 写入 originZ
                     ps.setString(14, s.visibility().name());
                     ps.setString(15, encodeFlags(s.flags()));
-                    ps.setString(16, s.bulletin());
-                    ps.setString(17, s.serverName());
-                    ps.setLong(18, s.createdAt().toEpochMilli());
-                    ps.setLong(19, s.lastActive().toEpochMilli());
-                    ps.setInt(20, s.likes());
+                    ps.setString(16, encodeLimits(s.limits()));
+                    ps.setString(17, s.bulletin());
+                    ps.setString(18, s.serverName());
+                    ps.setLong(19, s.createdAt().toEpochMilli());
+                    ps.setLong(20, s.lastActive().toEpochMilli());
+                    ps.setInt(21, s.likes());
                     ps.executeUpdate();
                 }
                 rewriteMembers(c, s);
@@ -222,6 +223,8 @@ public final class SqlShelterRepository implements ShelterRepository {
                 : new ShelterLayout(rs.getInt("start_border"), rs.getInt("growth_per_level"), maxLevel);
 
         Map<String, String> flags = decodeFlags(rs.getString("flags"));
+        // 限额数值入库；NULL/空 = 旧数据，读取方回退 levels.yml 按级现算，下次 save 自然固化。
+        Map<String, Integer> limits = decodeLimits(stringOrEmpty(rs, "limits"));
         Members m = loadMembers(c, owner.uuid().toString());
         return new Shelter(
                 owner,
@@ -237,7 +240,8 @@ public final class SqlShelterRepository implements ShelterRepository {
                 rs.getString("server_name"),
                 Instant.ofEpochMilli(rs.getLong("created_at")),
                 Instant.ofEpochMilli(rs.getLong("last_active")),
-                rs.getInt("likes"));
+                rs.getInt("likes"),
+                limits);
     }
 
     private int intOrZero(ResultSet rs, String column) {
@@ -345,6 +349,41 @@ public final class SqlShelterRepository implements ShelterRepository {
             int eq = line.indexOf('=');
             if (eq > 0) {
                 out.put(line.substring(0, eq), line.substring(eq + 1));
+            }
+        }
+        return out;
+    }
+
+    // —— limits 序列化（k=v 行，同 flags；键里的 machine: 冒号不受影响，按第一个 = 切分）——
+
+    private static String encodeLimits(Map<String, Integer> limits) {
+        if (limits == null || limits.isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<String, Integer> e : limits.entrySet()) {
+            if (sb.length() > 0) {
+                sb.append('\n');
+            }
+            sb.append(e.getKey()).append('=').append(e.getValue());
+        }
+        return sb.toString();
+    }
+
+    private static Map<String, Integer> decodeLimits(String raw) {
+        Map<String, Integer> out = new LinkedHashMap<>();
+        if (raw == null || raw.isBlank()) {
+            return out;
+        }
+        for (String line : raw.split("\n")) {
+            int eq = line.indexOf('=');
+            if (eq <= 0) {
+                continue;
+            }
+            try {
+                out.put(line.substring(0, eq), Integer.parseInt(line.substring(eq + 1)));
+            } catch (NumberFormatException ignored) {
+                // ignore malformed line
             }
         }
         return out;

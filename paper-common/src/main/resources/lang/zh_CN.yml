@@ -315,7 +315,7 @@ messages:
     bulletin: "&#8ee5ee/ps bulletin <公告内容> &f设置进入提示公告"
     flag: "&#8ee5ee/ps flag <设置项> <on|off> &8· &#8ee5ee/ps flags &f设置保护开关"
     time-weather: "&#8ee5ee/ps time <时间> &8· &#8ee5ee/ps weather <天气> &f修改时间与天气"
-    admin: "&#ffda75/ps admin <tp|delete|setlevel|grant|origin|perf|reload|info> <玩家> &f管理员指令"
+    admin: "&#ffda75/ps admin <tp|delete|setlevel|grant|origin|perf|reload|info|limit> <玩家> &f管理员指令"
 
   admin:
     no-permission: "&#ff6b6b你没有管理员权限。"
@@ -343,6 +343,10 @@ messages:
     grant-usage: "用法：&#8ee5ee/ps admin grant <玩家> <±等级增减>&f（例如 +2 或 -1）"
     delta-number: "&#ff6b6b增减数值必须是整数。"
     grant-success: "已将 &#ffda75{player}&f 的庇护所等级调整至 &#ffda75{level}&f 级 &f(边界调整为 &#ffda75{chunks}&f 区块)。"
+    limit-usage: "用法：&#8ee5ee/ps admin limit <玩家> <mobs|tiles|drops|vehicles|admin|trust|machine:方块id> <set|add> <值>"
+    limit-unknown-key: "&#ff6b6b未知的限额键：{key}（可用：mobs/tiles/drops/vehicles/admin/trust/machine:方块id）"
+    limit-number: "&#ff6b6b限额数值必须是整数。"
+    limit-success: "已将 &#ffda75{player}&f 的限额 &#8ee5ee{key}&f 调整为 &#ffda75{value}&f。"
     disk-start: "正在统计世界存档占用（后台异步处理中）…"
     reload-success: "已成功重新读取 config.yml 和语言文件。"
     reload-storage-warning: "&#ff6b6bstorage.yml/server.yml 属于启动级配置，修改后必须重启服务器才会生效。"

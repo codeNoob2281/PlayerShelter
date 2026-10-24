@@ -34,13 +34,16 @@ import java.util.Set;
  * @param createdAt   创建时间
  * @param lastActive  最后活跃时间（★生命周期核心：空闲卸载 #7 / 不活跃删除 #6 都看它）
  * @param likes       公开目录累计点赞数（决策 #39 每人一次，去重在 {@code DirectoryPort}）
+ * @param limits      限额数值入库（键见 {@code ShelterLimits}：mobs/tiles/drops/vehicles/admin/trust/machine:id）；
+ *                    空 = 旧数据，读取方回退 levels.yml 按级现算
  */
 public record Shelter(PlayerRef owner, String worldName, long seed, GenerationType genType,
                       int level, ShelterLayout layout, ShelterVisibility visibility,
                       Set<PlayerRef> admins, Set<PlayerRef> trusted, Set<PlayerRef> access,
                       Set<PlayerRef> denied, Map<String, String> flags,
                       String bulletin, String serverName,
-                      Instant createdAt, Instant lastActive, int likes) {
+                      Instant createdAt, Instant lastActive, int likes,
+                      Map<String, Integer> limits) {
 
     public Shelter {
         Objects.requireNonNull(owner, "owner");
@@ -58,6 +61,7 @@ public record Shelter(PlayerRef owner, String worldName, long seed, GenerationTy
         access = Set.copyOf(access == null ? Set.of() : access);
         denied = Set.copyOf(denied == null ? Set.of() : denied);
         flags = Map.copyOf(flags == null ? Map.of() : flags);
+        limits = Map.copyOf(limits == null ? Map.of() : limits);
         bulletin = bulletin == null ? "" : bulletin;
         serverName = serverName == null ? "" : serverName;
         if (likes < 0) {
@@ -69,7 +73,7 @@ public record Shelter(PlayerRef owner, String worldName, long seed, GenerationTy
     public static Shelter create(PlayerRef owner, String worldName, long seed,
                                  GenerationType genType, ShelterLayout layout, Instant now) {
         return new Shelter(owner, worldName, seed, genType, 1, layout, ShelterVisibility.PRIVATE,
-                Set.of(), Set.of(), Set.of(), Set.of(), Map.of(), "", "", now, now, 0);
+                Set.of(), Set.of(), Set.of(), Set.of(), Map.of(), "", "", now, now, 0, Map.of());
     }
 
     /** 当前庇护所物理地块 WorldBorder 直径（格）。 */
@@ -123,37 +127,37 @@ public record Shelter(PlayerRef owner, String worldName, long seed, GenerationTy
 
     public Shelter withLevel(int newLevel) {
         return new Shelter(owner, worldName, seed, genType, newLevel, layout, visibility,
-                admins, trusted, access, denied, flags, bulletin, serverName, createdAt, lastActive, likes);
+                admins, trusted, access, denied, flags, bulletin, serverName, createdAt, lastActive, likes, limits);
     }
 
     public Shelter withVisibility(ShelterVisibility v) {
         return new Shelter(owner, worldName, seed, genType, level, layout, v,
-                admins, trusted, access, denied, flags, bulletin, serverName, createdAt, lastActive, likes);
+                admins, trusted, access, denied, flags, bulletin, serverName, createdAt, lastActive, likes, limits);
     }
 
     public Shelter withAdmins(Set<PlayerRef> v) {
         return new Shelter(owner, worldName, seed, genType, level, layout, visibility,
-                v, trusted, access, denied, flags, bulletin, serverName, createdAt, lastActive, likes);
+                v, trusted, access, denied, flags, bulletin, serverName, createdAt, lastActive, likes, limits);
     }
 
     public Shelter withTrusted(Set<PlayerRef> v) {
         return new Shelter(owner, worldName, seed, genType, level, layout, visibility,
-                admins, v, access, denied, flags, bulletin, serverName, createdAt, lastActive, likes);
+                admins, v, access, denied, flags, bulletin, serverName, createdAt, lastActive, likes, limits);
     }
 
     public Shelter withAccess(Set<PlayerRef> v) {
         return new Shelter(owner, worldName, seed, genType, level, layout, visibility,
-                admins, trusted, v, denied, flags, bulletin, serverName, createdAt, lastActive, likes);
+                admins, trusted, v, denied, flags, bulletin, serverName, createdAt, lastActive, likes, limits);
     }
 
     public Shelter withDenied(Set<PlayerRef> v) {
         return new Shelter(owner, worldName, seed, genType, level, layout, visibility,
-                admins, trusted, access, v, flags, bulletin, serverName, createdAt, lastActive, likes);
+                admins, trusted, access, v, flags, bulletin, serverName, createdAt, lastActive, likes, limits);
     }
 
     public Shelter withFlags(Map<String, String> v) {
         return new Shelter(owner, worldName, seed, genType, level, layout, visibility,
-                admins, trusted, access, denied, v, bulletin, serverName, createdAt, lastActive, likes);
+                admins, trusted, access, denied, v, bulletin, serverName, createdAt, lastActive, likes, limits);
     }
 
     /** 兼容旧调用：边界由 level + layout 直接计算，不需要额外状态。 */
@@ -163,22 +167,28 @@ public record Shelter(PlayerRef owner, String worldName, long seed, GenerationTy
 
     public Shelter withBulletin(String v) {
         return new Shelter(owner, worldName, seed, genType, level, layout, visibility,
-                admins, trusted, access, denied, flags, v, serverName, createdAt, lastActive, likes);
+                admins, trusted, access, denied, flags, v, serverName, createdAt, lastActive, likes, limits);
     }
 
     public Shelter withServerName(String v) {
         return new Shelter(owner, worldName, seed, genType, level, layout, visibility,
-                admins, trusted, access, denied, flags, bulletin, v, createdAt, lastActive, likes);
+                admins, trusted, access, denied, flags, bulletin, v, createdAt, lastActive, likes, limits);
     }
 
     /** 标记活跃（玩家进入/操作时刷新；空闲卸载与不活跃删除都以此为基准）。 */
     public Shelter withLastActive(Instant when) {
         return new Shelter(owner, worldName, seed, genType, level, layout, visibility,
-                admins, trusted, access, denied, flags, bulletin, serverName, createdAt, when, likes);
+                admins, trusted, access, denied, flags, bulletin, serverName, createdAt, when, likes, limits);
     }
 
     public Shelter withLikes(int v) {
         return new Shelter(owner, worldName, seed, genType, level, layout, visibility,
-                admins, trusted, access, denied, flags, bulletin, serverName, createdAt, lastActive, v);
+                admins, trusted, access, denied, flags, bulletin, serverName, createdAt, lastActive, v, limits);
+    }
+
+    /** 覆盖限额数值（限额入库：初始/差值迁移见 {@code ShelterLimits}，单项调整见 admin 指令）。 */
+    public Shelter withLimits(Map<String, Integer> v) {
+        return new Shelter(owner, worldName, seed, genType, level, layout, visibility,
+                admins, trusted, access, denied, flags, bulletin, serverName, createdAt, lastActive, likes, v);
     }
 }

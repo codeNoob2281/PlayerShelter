@@ -110,9 +110,11 @@ public abstract class AbstractPlayerShelterPlugin extends JavaPlugin {
 
         Clock clock = Clock.systemUTC();
         SqlResetLogStore resetLog = new SqlResetLogStore(database, getLogger());
+        // 限额默认值源（levels.yml）：ShelterService 建/升级时据此写库存初始值与差值。
+        org.windy.playershelter.service.EntityLimits entityLimits = pc.entityLimits();
         ShelterService shelterService = new ShelterService(repo, world, economy,
                 new org.windy.playershelter.adapter.inventory.BukkitItemCostPort(getLogger()),
-                config, clock, resetLog);
+                config, clock, resetLog, entityLimits);
         this.lifecycle = new WorldLifecycleService(repo, world, scheduler, config, clock);
 
         org.windy.playershelter.adapter.world.SafeLanding safeLanding =
@@ -129,7 +131,7 @@ public abstract class AbstractPlayerShelterPlugin extends JavaPlugin {
 
         org.windy.playershelter.adapter.limit.LimitEnforcer limits =
                 new org.windy.playershelter.adapter.limit.LimitEnforcer(
-                        pc.entityLimits(),
+                        entityLimits,
                         new org.windy.playershelter.adapter.limit.ShelterCensus(),
                         pc.limitsEnabled());
 

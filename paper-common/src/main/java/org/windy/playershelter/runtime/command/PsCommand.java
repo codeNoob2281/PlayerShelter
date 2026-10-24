@@ -472,7 +472,9 @@ public final class PsCommand implements TabExecutor {
                 } else {
                     Shelter sh = core.repo().find(owner).orElseThrow();
                     Messages.errorKey(p, "role.trust-cap", "共建名额已满（上限 {cap}，升级可增加）。",
-                            "cap", core.config().trustCapAt(sh.level()));
+                            "cap", sh.limits().getOrDefault(
+                                    org.windy.playershelter.service.ShelterLimits.TRUST,
+                                    core.config().trustCapAt(sh.level())));
                 }
             }
             case ACCESS -> {
@@ -494,7 +496,9 @@ public final class PsCommand implements TabExecutor {
                 } else {
                     Shelter sh = core.repo().find(owner).orElseThrow();
                     Messages.errorKey(p, "role.admin-cap", "管理员名额已满（上限 {cap}，升级可增加）。",
-                            "cap", core.config().adminCapAt(sh.level()));
+                            "cap", sh.limits().getOrDefault(
+                                    org.windy.playershelter.service.ShelterLimits.ADMIN,
+                                    core.config().adminCapAt(sh.level())));
                 }
             }
         }
@@ -1112,6 +1116,14 @@ public final class PsCommand implements TabExecutor {
         if (args.length == 3 && args[0].equalsIgnoreCase("admin") && AdminCommand.isAdminAction(args[1])
                 && !List.of("list", "disk", "perf", "reload").contains(args[1].toLowerCase())) {
             return onlineNames(args[2]); // /ps admin <action> <玩家>
+        }
+        if (args[0].equalsIgnoreCase("admin") && args[1].equalsIgnoreCase("limit")) {
+            if (args.length == 4) {
+                return prefix(AdminCommand.limitKeys(), args[3]); // /ps admin limit <玩家> <键>
+            }
+            if (args.length == 5) {
+                return prefix(Arrays.asList("set", "add"), args[4]);
+            }
         }
         return List.of();
     }

@@ -45,7 +45,8 @@ class ShelterServiceTest {
         repo = new Fakes.MemRepo();
         world = new Fakes.FakeWorld();
         config = new ShelterConfig(LAYOUT,
-                10, 8, 30, 7, 12, 2, 2, 3, 1000, 1.5, "");
+                10, 8, 30, 7, 12, 2, 3, "",
+                Map.of(2, 1000.0), Map.of(), Map.of(1, 2), Map.of(1, 5));
     }
 
     private ShelterService svc(Fakes.FakeEconomy eco) {
@@ -105,7 +106,7 @@ class ShelterServiceTest {
     @Test
     void upgradeBlockedWhenMaterialsMissing() {
         ShelterConfig cfg = new ShelterConfig(LAYOUT,
-                10, 8, 30, 7, 12, 2, 2, 0, 5, 1, 3, 0, 1.5, "",
+                10, 8, 30, 7, 12, 2, 3, "",
                 Map.of(2, 0.0), Map.of(2, List.of(new ItemCost("minecraft:oak_log", 64))), Map.of(), Map.of());
         Fakes.FakeItemCosts items = new Fakes.FakeItemCosts().with("minecraft:oak_log", 32);
         ShelterService s = new ShelterService(repo, world, new Fakes.FakeEconomy(false, 0),
@@ -126,7 +127,7 @@ class ShelterServiceTest {
     @Test
     void upgradeWithdrawsMaterials() {
         ShelterConfig cfg = new ShelterConfig(LAYOUT,
-                10, 8, 30, 7, 12, 2, 2, 0, 5, 1, 3, 0, 1.5, "",
+                10, 8, 30, 7, 12, 2, 3, "",
                 Map.of(2, 0.0), Map.of(2, List.of(new ItemCost("minecraft:oak_log", 64))), Map.of(), Map.of());
         Fakes.FakeItemCosts items = new Fakes.FakeItemCosts().with("minecraft:oak_log", 80);
         ShelterService s = new ShelterService(repo, world, new Fakes.FakeEconomy(false, 0),
@@ -292,9 +293,10 @@ class ShelterServiceTest {
 
     @Test
     void trustCapScalesWithLevel() {
-        // trust 基础 5 每级 +1；用带名额随等级的完整构造。
+        // 名额随等级（决策 P1）：显式按级配置，1 级上限 2、3 级上限 4。
         ShelterConfig cfg = new ShelterConfig(LAYOUT,
-                10, 8, 30, 7, 12, 2, 3, 0, 2, 1, 3, 0, 1.5, ""); // adminBase3/perLv0, trustBase2/perLv1
+                10, 8, 30, 7, 12, 2, 3, "",
+                Map.of(), Map.of(), Map.of(), Map.of(1, 2, 3, 4));
         ShelterService s = new ShelterService(repo, world, new Fakes.FakeEconomy(false, 0),
                 cfg, java.time.Clock.systemUTC());
         s.create(owner, GenerationType.NATURAL, null, x -> {}, () -> {});
@@ -326,6 +328,78 @@ class ShelterServiceTest {
     void setFlagFailsWithoutShelter() {
         ShelterService s = svc(new Fakes.FakeEconomy(false, 0));
         assertFalse(s.setFlag(owner, "pvp", true));
+    }
+
+    @Test
+    void upgradeAccumulatesLimitDeltaAndKeepsManualAdjustments() {
+        // 限额数值入库：升级 = 库存值 +（新级配置 − 旧级配置），admin 手动调整量保留。
+        org.windy.playershelter.service.EntityLimits el = new org.windy.playershelter.service.EntityLimits(20,
+                Map.of(
+                        1, new org.windy.playershelter.service.EntityLimits.Caps(10, 20, 30, 5),
+                        2, new org.windy.playershelter.service.EntityLimits.Caps(15, 25, 40, 8)),
+                Map.of());
+        ShelterService s = new ShelterService(repo, world, new Fakes.FakeEconomy(false, 0),
+                org.windy.playershelter.domain.port.ItemCostPort.DISABLED, config, Clock.systemUTC(),
+                new org.windy.playershelter.domain.port.ResetLogStore.InMemory(), el);
+        s.create(owner, GenerationType.NATURAL, null, x -> {}, () -> {});
+        Shelter created = repo.find(owner).orElseThrow();
+        assertEquals(10, created.limits().get("mobs"));   // 创建 = 1 级配置快照
+        assertEquals(5, created.limits().get("trust"));   // config trustCaps 1 级 = 5
+
+        // 模拟 admin 手动把 mobs 调成 77。
+        java.util.Map<String, Integer> adjusted = new java.util.HashMap<>(created.limits());
+        adjusted.put("mobs", 77);
+        repo.save(created.withLimits(adjusted));
+
+        assertInstanceOf(ShelterService.UpgradeResult.Ok.class, s.upgrade(owner));
+        Shelter after = repo.find(owner).orElseThrow();
+        assertEquals(77 + (15 - 10), after.limits().get("mobs"));  // 差值累加，手动量保留
+        assertEquals(20 + (25 - 20), after.limits().get("tiles"));
+        assertEquals(30 + (40 - 30), after.limits().get("drops"));
+        assertEquals(5 + (8 - 5), after.limits().get("vehicles"));
+        assertEquals(2, after.limits().get("admin"));              // 配置未变 → 不动
+    }
+
+    @Test
+    void resetWithoutKeepLevelResetsLimitsToLevelOneDefaults() {
+        org.windy.playershelter.service.EntityLimits el = new org.windy.playershelter.service.EntityLimits(20,
+                Map.of(
+                        1, new org.windy.playershelter.service.EntityLimits.Caps(10, 20, 30, 5),
+                        2, new org.windy.playershelter.service.EntityLimits.Caps(15, 25, 40, 8)),
+                Map.of());
+        ShelterService s = new ShelterService(repo, world, new Fakes.FakeEconomy(false, 0),
+                org.windy.playershelter.domain.port.ItemCostPort.DISABLED, config, Clock.systemUTC(),
+                new org.windy.playershelter.domain.port.ResetLogStore.InMemory(), el);
+        s.create(owner, GenerationType.NATURAL, null, x -> {}, () -> {});
+        s.upgrade(owner); // 2 级，mobs 升到 15
+        assertEquals(15, repo.find(owner).orElseThrow().limits().get("mobs"));
+
+        // 不保留等级的 reset：等级回 1，限额重置回 1 级默认。
+        assertEquals(ShelterService.ResetResult.STARTED, s.reset(owner, false, null, x -> {}, () -> {}));
+        Shelter after = repo.find(owner).orElseThrow();
+        assertEquals(1, after.level());
+        assertEquals(10, after.limits().get("mobs"));
+        assertEquals(20, after.limits().get("tiles"));
+    }
+
+    @Test
+    void resetKeepLevelPreservesLimits() {
+        org.windy.playershelter.service.EntityLimits el = new org.windy.playershelter.service.EntityLimits(20,
+                Map.of(
+                        1, new org.windy.playershelter.service.EntityLimits.Caps(10, 20, 30, 5),
+                        2, new org.windy.playershelter.service.EntityLimits.Caps(15, 25, 40, 8)),
+                Map.of());
+        ShelterService s = new ShelterService(repo, world, new Fakes.FakeEconomy(false, 0),
+                org.windy.playershelter.domain.port.ItemCostPort.DISABLED, config, Clock.systemUTC(),
+                new org.windy.playershelter.domain.port.ResetLogStore.InMemory(), el);
+        s.create(owner, GenerationType.NATURAL, null, x -> {}, () -> {});
+        java.util.Map<String, Integer> adjusted = new java.util.HashMap<>(repo.find(owner).orElseThrow().limits());
+        adjusted.put("mobs", 77);
+        repo.save(repo.find(owner).orElseThrow().withLimits(adjusted));
+
+        // 保留等级的 reset：限额原样不动（含手动调整量）。
+        assertEquals(ShelterService.ResetResult.STARTED, s.reset(owner, true, null, x -> {}, () -> {}));
+        assertEquals(77, repo.find(owner).orElseThrow().limits().get("mobs"));
     }
 
     @Test

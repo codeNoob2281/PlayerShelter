@@ -56,13 +56,7 @@ public final class PluginConfig {
                 cfg.getInt("lifecycle.inactive-grace-days", d.inactiveGraceDays()),
                 cfg.getInt("reset.cooldown-hours", d.resetCooldownHours()),
                 cfg.getInt("reset.max-per-day", d.resetMaxPerDay()),
-                d.adminCap(),
-                d.adminPerLevel(),
-                d.trustCapBase(),
-                d.trustPerLevel(),
                 cfg.getInt("directory.public-min-level", d.publicMinLevel()),
-                d.upgradeBaseCost(),
-                d.upgradeCostFactor(),
                 serverName(d.defaultServerName()),
                 upgradeMoneyLevelMap(),
                 upgradeItemLevelMap(),
@@ -146,23 +140,10 @@ public final class PluginConfig {
         return out;
     }
 
-    /** 实体/机器限额（决策 P1）。等级线性 + 机器按方块 id 配额。 */
+    /** 实体/机器限额（决策 P1）。上限全部来自 levels.yml 显式按级配置。 */
     public EntityLimits entityLimits() {
-        int maxLevel = shelterConfig.layout().maxLevel();
-        Map<String, Integer> machines = new LinkedHashMap<>();
-        ConfigurationSection sec = cfg.getConfigurationSection("limits.machines");
-        if (sec != null) {
-            for (String key : sec.getKeys(false)) {
-                machines.put(key.toLowerCase(), sec.getInt(key));
-            }
-        }
         return new EntityLimits(
-                cfg.getInt("limits.mobs.base", 60), cfg.getInt("limits.mobs.per-level", 4),
-                cfg.getInt("limits.tiles.base", 200), cfg.getInt("limits.tiles.per-level", 20),
-                cfg.getInt("limits.drops.base", 100), cfg.getInt("limits.drops.per-level", 8),
-                cfg.getInt("limits.vehicles.base", 20), cfg.getInt("limits.vehicles.per-level", 2),
-                maxLevel,
-                machines, cfg.getInt("limits.machines-per-level", 1),
+                shelterConfig.layout().maxLevel(),
                 explicitLimitCaps(),
                 explicitMachineCaps());
     }

@@ -129,6 +129,11 @@ public final class Migrations {
                 "ALTER TABLE ps_shelter ADD COLUMN origin_z INT NOT NULL DEFAULT 0"
         )));
 
+        // v8：限额数值入库（levels.yml 仅作默认值）。limits 为 k=v 行序列化（同 flags）。
+        all.add(new Step(8, List.of(
+                "ALTER TABLE ps_shelter ADD COLUMN limits TEXT"
+        )));
+
         return all;
     }
 

@@ -35,13 +35,16 @@ public final class ShelterService {
     private final ItemCostPort itemCosts;
     private final ShelterConfig config;
     private final Clock clock;
+    /** 限额默认值源（levels.yml）；实际生效值是 Shelter.limits 库存数值（见 {@link ShelterLimits}）。 */
+    private final EntityLimits entityLimits;
     /** reset 冷却/限额记录（决策 #77，持久化 → 重启不清零）。 */
     private final ResetLogStore resetLog;
     /** 正在异步建世界的 owner（竞态守卫，防连点 /ps create 重复建）。 */
     private final java.util.Set<UUID> creating = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     public ShelterService(ShelterRepository repo, WorldControl world, EconomyPort economy,
-                          ItemCostPort itemCosts, ShelterConfig config, Clock clock, ResetLogStore resetLog) {
+                          ItemCostPort itemCosts, ShelterConfig config, Clock clock, ResetLogStore resetLog,
+                          EntityLimits entityLimits) {
         this.repo = Objects.requireNonNull(repo);
         this.world = Objects.requireNonNull(world);
         this.economy = Objects.requireNonNull(economy);
@@ -49,6 +52,12 @@ public final class ShelterService {
         this.config = Objects.requireNonNull(config);
         this.clock = Objects.requireNonNull(clock);
         this.resetLog = Objects.requireNonNull(resetLog);
+        this.entityLimits = Objects.requireNonNull(entityLimits);
+    }
+
+    public ShelterService(ShelterRepository repo, WorldControl world, EconomyPort economy,
+                          ItemCostPort itemCosts, ShelterConfig config, Clock clock, ResetLogStore resetLog) {
+        this(repo, world, economy, itemCosts, config, clock, resetLog, EntityLimits.unlimited());
     }
 
     public ShelterService(ShelterRepository repo, WorldControl world, EconomyPort economy,
@@ -88,7 +97,8 @@ public final class ShelterService {
         Instant now = clock.instant();
         long seed = new java.util.Random().nextLong();
         Shelter seedShelter = Shelter.create(owner, worldNameFor(owner), seed, genType, config.layout(), now)
-                .withServerName(config.defaultServerName());
+                .withServerName(config.defaultServerName())
+                .withLimits(ShelterLimits.initial(1, entityLimits, config));
         world.ensureWorldAsync(seedShelter, audience, ready -> {
             repo.save(ready);
             creating.remove(owner.uuid());
@@ -140,7 +150,9 @@ public final class ShelterService {
             return new UpgradeResult.NoMaterials(items, missing);
         }
 
-        Shelter up = s.withLevel(s.level() + 1).withAutoUnlockedChunksForLevel().withLastActive(clock.instant());
+        Shelter up = s.withLevel(s.level() + 1)
+                .withLimits(ShelterLimits.migrate(s.limits(), s.level(), s.level() + 1, entityLimits, config))
+                .withAutoUnlockedChunksForLevel().withLastActive(clock.instant());
         repo.save(up);
         if (world.isLoaded(up.worldName())) {
             world.applyBorder(up);
@@ -170,8 +182,10 @@ public final class ShelterService {
             return ResetResult.COOLDOWN;
         }
         int newLevel = keepLevel ? s.level() : 1;
+        // 不保留等级 = 数值一并重置回 1 级默认；保留等级则限额原样不动（含 admin 手动调整量）。
+        Map<String, Integer> newLimits = keepLevel ? s.limits() : ShelterLimits.initial(1, entityLimits, config);
         final int newCount = todayCount + 1;
-        rebuildTerrain(s, newLevel, audience, ready -> {
+        rebuildTerrain(s, newLevel, newLimits, audience, ready -> {
             resetLog.save(owner, new ResetLogStore.ResetRecord(now.toEpochMilli(), newCount, today));
             onReady.accept(ready);
         }, onError);
@@ -188,22 +202,23 @@ public final class ShelterService {
             onError.run();
             return false;
         }
-        rebuildTerrain(s, s.level(), audience, onReady, onError);
+        rebuildTerrain(s, s.level(), s.limits(), audience, onReady, onError);
         return true;
     }
 
     /**
      * 抹地形重生成的<b>公共核心</b>（reset 与 admin regen 共用）：删旧世界文件、换新种子重建，
      * <b>保留全部非地形状态</b>——成员(admin/trust/access/denied)、flag、可见性、公告、点赞、冻结布局。
+     * 限额数值由调用方决定（reset 不保留等级时重置回 1 级默认）。
      * 标签/留言 keyed by owner 自动保留。须主线程调（删世界文件）。
      */
-    private void rebuildTerrain(Shelter s, int newLevel, UUID audience,
+    private void rebuildTerrain(Shelter s, int newLevel, Map<String, Integer> newLimits, UUID audience,
                                Consumer<Shelter> onReady, Runnable onError) {
         world.deleteWorld(s.worldName());
         long newSeed = new java.util.Random().nextLong();
         Shelter rebuilt = new Shelter(s.owner(), s.worldName(), newSeed, s.genType(), newLevel, s.layout(),
                 s.visibility(), s.admins(), s.trusted(), s.access(), s.denied(), s.flags(),
-                s.bulletin(), s.serverName(), s.createdAt(), clock.instant(), s.likes());
+                s.bulletin(), s.serverName(), s.createdAt(), clock.instant(), s.likes(), newLimits);
         world.ensureWorldAsync(rebuilt, audience, ready -> {
             repo.save(ready);
             onReady.accept(ready);
@@ -258,21 +273,23 @@ public final class ShelterService {
         if (s == null) {
             return false;
         }
-        // 副主人名额随等级（决策 P1）；已在名单内不占新额（改判即视为已存在）。
-        if (!s.admins().contains(target) && s.admins().size() >= config.adminCapAt(s.level())) {
+        // 副主人名额随等级（决策 P1）；名额数值入库，缺键（旧数据）回退配置按级现算；已在名单内不占新额。
+        int cap = s.limits().getOrDefault(ShelterLimits.ADMIN, config.adminCapAt(s.level()));
+        if (!s.admins().contains(target) && s.admins().size() >= cap) {
             return false;
         }
         repo.save(mutate(s, target, Tier.ADMIN));
         return true;
     }
 
-    /** 加共建 trust；名额随等级（决策 P1）。超额返回 false。 */
+    /** 加共建 trust；名额随等级（决策 P1，数值入库，缺键回退配置）。超额返回 false。 */
     public boolean addTrusted(PlayerRef owner, PlayerRef target) {
         Shelter s = repo.find(owner).orElse(null);
         if (s == null) {
             return false;
         }
-        if (!s.trusted().contains(target) && s.trusted().size() >= config.trustCapAt(s.level())) {
+        int cap = s.limits().getOrDefault(ShelterLimits.TRUST, config.trustCapAt(s.level()));
+        if (!s.trusted().contains(target) && s.trusted().size() >= cap) {
             return false;
         }
         repo.save(mutate(s, target, Tier.TRUSTED));
