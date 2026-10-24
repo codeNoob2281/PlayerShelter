@@ -17,13 +17,6 @@ plugins {
 
 rootProject.name = 'playershelter'
 
-// GuildShelter API：软集成迁移监听器编译期依赖（运行期由 GuildShelter 主插件提供）。
-includeBuild('../GuildShelter') {
-    dependencySubstitution {
-        substitute(module('org.windy:guildshelter-api')).using(project(':guildshelter-api'))
-    }
-}
-
 // 一人一世界（个人庇护所）。模块拆分同 GuildShelter：纯核心 + 共享 Paper 胶水 + 每载体一个薄入口。
 include 'playershelter-api' // 对外扩展 API（纯接口+DTO+事件，第三方附属 compileOnly）
 include 'core'             // domain · service · persistence（平台无关纯 Java）
