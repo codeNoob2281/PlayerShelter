@@ -20,10 +20,8 @@ migration:
     # false = 遇到已加载缓存就拒绝写入，适合最保守的生产模式。
     evict-loaded-cache: true
 
-# GuildShelter 软集成：玩家获得公会庄园时，自动将庇护所建筑迁移至庄园。
-# 需要服务器同时安装 GuildShelter；未安装时此选项无效。
-guildshelter-migration:
-  enabled: true
+# GuildShelter 软集成（获得庄园时自动迁移庇护所）已拆到独立扩展插件 PlayerShelter-GSBridge，
+# 其开关在 plugins/PlayerShelter-GSBridge/config.yml 里，本插件不再读取该配置。
 
 directory:
   public-min-level: 3

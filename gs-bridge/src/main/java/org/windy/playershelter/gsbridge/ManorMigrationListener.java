@@ -1,7 +1,6 @@
-package org.windy.playershelter.runtime.listener;
+package org.windy.playershelter.gsbridge;
 
 import org.bukkit.Bukkit;
-import org.bukkit.OfflinePlayer;
 import org.bukkit.World;
 import org.bukkit.boss.BarColor;
 import org.bukkit.boss.BarStyle;
@@ -15,19 +14,13 @@ import org.windy.guildshelter.api.GuildShelterMigrationRegion;
 import org.windy.guildshelter.api.event.ManorAssignedEvent;
 import org.windy.playershelter.api.PlayerShelterApi;
 import org.windy.playershelter.api.PlayerShelterMigrationRegion;
-import org.windy.playershelter.domain.port.RegionMover;
-import org.windy.playershelter.runtime.PsCore;
-import org.windy.playershelter.runtime.api.ApiImpl;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.logging.Logger;
@@ -38,45 +31,28 @@ import java.util.zip.ZipOutputStream;
 /**
  * 软集成：玩家获得 GuildShelter 庄园 slot 时，自动将其 PlayerShelter 庇护所建筑迁移至庄园。
  *
- * <p>编译期仅依赖 GS API 模块（纯接口+DTO+事件，零实现），运行期由 GuildShelter 主插件提供。
- * GuildShelter 未安装时本监听器不注册，对 PlayerShelter 无任何影响。
+ * <p>与主插件的关系：<b>只经 {@link PlayerShelterApi} 公开接口</b>（区域导出 / 异步复制 / 世界目录 / 删除收尾），
+ * 不触碰 {@code PsCore} 之类内部实现——所以本 jar 与主插件可以各自独立升级。
+ * 与 GuildShelter 的关系：编译期只依赖其纯接口 API 模块，运行期由 GuildShelter 主插件提供。
  *
- * <p>迁移路径与 {@code /psgs ps-to-gs} 手动命令完全一致：
- * 使用 {@link RegionMover#copyRegionAsync}，在 NeoForge 上走 {@code MigrationTask}
- * （主线程逐 chunk 复制 + 实体 + SavedData），在 Bukkit 上走 WorldEdit clipboard 复制。
- * 含 bossbar 进度 + 备份。
+ * <p>迁移路径与 {@code /psgs ps-to-gs} 手动命令一致：经主插件 {@code RegionMover} 复制
+ * （NeoForge 上逐 chunk 分 tick，Bukkit 上走 WorldEdit clipboard），含 bossbar 进度 + 备份。
  */
-public final class GuildShelterMigrationListener implements Listener {
+public final class ManorMigrationListener implements Listener {
 
     private static final DateTimeFormatter BACKUP_TS =
             DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss").withZone(ZoneId.systemDefault());
 
-    private final Plugin psPlugin;
-    private final PsCore core;
+    private final Plugin plugin;
     private final PlayerShelterApi psApi;
     private final Logger logger;
+    private final String prefix;
 
-    private GuildShelterMigrationListener(Plugin psPlugin, PsCore core, PlayerShelterApi psApi, Logger logger) {
-        this.psPlugin = psPlugin;
-        this.core = core;
+    ManorMigrationListener(Plugin plugin, PlayerShelterApi psApi, String prefix) {
+        this.plugin = plugin;
         this.psApi = psApi;
-        this.logger = logger;
-    }
-
-    /**
-     * 尝试注册本监听器。GuildShelter 未安装时静默跳过。
-     *
-     * @return true 如果已注册（GuildShelter 在线）
-     */
-    public static boolean tryRegister(Plugin psPlugin, PlayerShelterApi psApi, Logger logger) {
-        if (Bukkit.getPluginManager().getPlugin("GuildShelter") == null) {
-            return false;
-        }
-        PsCore core = ((ApiImpl) psApi).core();
-        Bukkit.getPluginManager().registerEvents(
-                new GuildShelterMigrationListener(psPlugin, core, psApi, logger), psPlugin);
-        logger.info("[PlayerShelter] GuildShelter 软集成已启用（获得庄园时自动迁移庇护所）。");
-        return true;
+        this.logger = plugin.getLogger();
+        this.prefix = prefix == null || prefix.isBlank() ? "[PSGS]" : prefix;
     }
 
     @EventHandler
@@ -104,7 +80,7 @@ public final class GuildShelterMigrationListener implements Listener {
 
         Optional<GuildShelterMigrationRegion> gsOpt = gsApi.exportManor(playerId);
         if (gsOpt.isEmpty()) {
-            logger.info("[PlayerShelter] 玩家 " + player.getName() + " 的 GS 庄园区域未就绪，跳过迁移。");
+            logger.info("[PSGS] 玩家 " + player.getName() + " 的 GS 庄园区域未就绪，跳过迁移。");
             return;
         }
         GuildShelterMigrationRegion gsRegion = gsOpt.get();
@@ -118,40 +94,40 @@ public final class GuildShelterMigrationListener implements Listener {
         String migrationId = "auto-" + playerId.toString().substring(0, 8)
                 + "-" + Long.toUnsignedString(System.currentTimeMillis(), 36);
 
-        logger.info("[PlayerShelter] 开始迁移 " + player.getName() + " 的庇护所 → 公会 " + guildId
+        logger.info("[PSGS] 开始迁移 " + player.getName() + " 的庇护所 → 公会 " + guildId
                 + " 庄园 #" + gsRegion.slot() + "（" + copySize + " chunks）id=" + migrationId);
 
         // BossBar（玩家在线才显示）
         BossBar bossBar = Bukkit.createBossBar(
-                "[PSGS] 迁移准备中 " + migrationId, BarColor.BLUE, BarStyle.SEGMENTED_20);
+                prefix + " 迁移准备中 " + migrationId, BarColor.BLUE, BarStyle.SEGMENTED_20);
         bossBar.setProgress(0.0);
         bossBar.addPlayer(player);
         bossBar.setVisible(true);
 
         // 与 /psgs ps-to-gs 相同的复制路径
-        core.regionMover().copyRegionAsync(
+        psApi.copyMigrationRegionAsync(
                 psRegion.worldName(), psRegion.minChunkX(), psRegion.minChunkZ(), copySize,
                 gsRegion.worldName(), gsRegion.minChunkX(), gsRegion.minChunkZ(),
                 step -> runMain(() -> {
                     bossBar.setProgress(Math.max(0.0, Math.min(1.0, step.overall())));
-                    bossBar.setTitle("[PSGS] " + step.phase() + " " + Math.round(step.overall() * 100) + "%");
+                    bossBar.setTitle(prefix + " " + step.phase() + " " + Math.round(step.overall() * 100) + "%");
                 }),
                 copied -> runMain(() -> {
                     if (!copied) {
                         logger.warning("[PSGS] 方块复制失败 id=" + migrationId);
                         bossBar.setColor(BarColor.RED);
-                        bossBar.setTitle("[PSGS] 复制失败");
-                        Bukkit.getScheduler().runTaskLater(psPlugin, bossBar::removeAll, 100L);
+                        bossBar.setTitle(prefix + " 复制失败");
+                        Bukkit.getScheduler().runTaskLater(plugin, bossBar::removeAll, 100L);
                         player.sendMessage("§e[PlayerShelter] 建筑复制失败，你的庇护所已保留。");
                         return;
                     }
-                    bossBar.setTitle("[PSGS] 备份中...");
+                    bossBar.setTitle(prefix + " 备份中...");
                     // 备份 + 删除（异步zip → 主线程删世界）
-                    backupAndDelete(player, psRegion.worldName(), guildId, gsRegion.slot(), migrationId, bossBar);
+                    backupAndDelete(player, psRegion.worldName(), gsRegion.slot(), migrationId, bossBar);
                 }));
     }
 
-    private void backupAndDelete(Player player, String worldName, String guildId, int slot,
+    private void backupAndDelete(Player player, String worldName, int slot,
                                  String migrationId, BossBar bossBar) {
         UUID playerId = player.getUniqueId();
         String playerName = player.getName();
@@ -162,74 +138,51 @@ public final class GuildShelterMigrationListener implements Listener {
             try { loadedWorld.save(); } catch (RuntimeException ignored) {}
         }
 
-        Optional<Path> sourceFolder = resolveWorldFolder(worldName);
+        Optional<Path> sourceFolder = psApi.shelterWorldFolder(playerId);
         if (sourceFolder.isEmpty()) {
             logger.warning("[PSGS] 备份跳过 id=" + migrationId + " 原因=找不到世界目录");
             bossBar.setColor(BarColor.GREEN);
-            bossBar.setTitle("[PSGS] 迁移完成（未备份）");
-            Bukkit.getScheduler().runTaskLater(psPlugin, bossBar::removeAll, 60L);
-            core.repo().delete(org.windy.playershelter.domain.model.PlayerRef.of(playerId));
+            bossBar.setTitle(prefix + " 迁移完成（未备份）");
+            Bukkit.getScheduler().runTaskLater(plugin, bossBar::removeAll, 60L);
+            psApi.deleteShelter(playerId);
             player.sendMessage("§a[PlayerShelter] 你的庇护所已迁移到公会庄园（slot " + slot + "）！");
             return;
         }
 
-        Path backupDir = core.plugin().getDataFolder().toPath().resolve("backup");
+        Path backupDir = psApi.dataFolder().resolve("backup");
         Path targetZip = uniqueBackupZip(backupDir, playerName, worldName);
         logger.info("[PSGS] 备份开始 id=" + migrationId + " source=" + sourceFolder.get() + " backup=" + targetZip);
 
-        Bukkit.getScheduler().runTaskAsynchronously(psPlugin, () -> {
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             boolean backedUp = zipDirectory(sourceFolder.get(), targetZip);
-            Bukkit.getScheduler().runTask(psPlugin, () -> {
+            Bukkit.getScheduler().runTask(plugin, () -> {
                 if (!backedUp) {
                     logger.warning("[PSGS] 备份失败 id=" + migrationId);
                     bossBar.setColor(BarColor.YELLOW);
-                    bossBar.setTitle("[PSGS] 备份失败，已保留原世界");
-                    Bukkit.getScheduler().runTaskLater(psPlugin, bossBar::removeAll, 100L);
+                    bossBar.setTitle(prefix + " 备份失败，已保留原世界");
+                    Bukkit.getScheduler().runTaskLater(plugin, bossBar::removeAll, 100L);
                     player.sendMessage("§e[PlayerShelter] 建筑已复制，但源世界备份失败，已保留原世界。");
                     return;
                 }
-                boolean deleted = core.world().deleteWorld(worldName);
+                boolean deleted = psApi.deleteShelter(playerId);
                 if (deleted) {
-                    core.repo().delete(org.windy.playershelter.domain.model.PlayerRef.of(playerId));
                     logger.info("[PSGS] 迁移完成 id=" + migrationId + " backup=" + targetZip.getFileName());
                     bossBar.setColor(BarColor.GREEN);
-                    bossBar.setTitle("[PSGS] 迁移完成");
-                    Bukkit.getScheduler().runTaskLater(psPlugin, bossBar::removeAll, 60L);
+                    bossBar.setTitle(prefix + " 迁移完成");
+                    Bukkit.getScheduler().runTaskLater(plugin, bossBar::removeAll, 60L);
                     player.sendMessage("§a[PlayerShelter] 你的庇护所已迁移到公会庄园（slot " + slot + "），源世界已备份。");
                 } else {
                     logger.warning("[PSGS] 世界删除失败 id=" + migrationId + " world=" + worldName);
                     bossBar.setColor(BarColor.YELLOW);
-                    bossBar.setTitle("[PSGS] 备份完成，世界删除失败");
-                    Bukkit.getScheduler().runTaskLater(psPlugin, bossBar::removeAll, 100L);
+                    bossBar.setTitle(prefix + " 备份完成，世界删除失败");
+                    Bukkit.getScheduler().runTaskLater(plugin, bossBar::removeAll, 100L);
                     player.sendMessage("§e[PlayerShelter] 建筑已复制并备份，但旧世界删除失败：" + worldName);
                 }
             });
         });
     }
 
-    // ===== 备份工具（与 PsgsCommand 共用逻辑）=====
-
-    private Optional<Path> resolveWorldFolder(String worldName) {
-        World world = Bukkit.getWorld(worldName);
-        if (world != null) {
-            File folder = world.getWorldFolder();
-            if (folder != null && folder.isDirectory()) {
-                return Optional.of(folder.toPath());
-            }
-        }
-        File container = Bukkit.getWorldContainer();
-        File direct = new File(container, worldName);
-        if (direct.isDirectory()) {
-            return Optional.of(direct.toPath());
-        }
-        String mainWorld = Bukkit.getWorlds().isEmpty() ? "world" : Bukkit.getWorlds().get(0).getName();
-        File dim = new File(container, mainWorld + File.separator + "dimensions"
-                + File.separator + "minecraft" + File.separator + worldName);
-        if (dim.isDirectory()) {
-            return Optional.of(dim.toPath());
-        }
-        return Optional.empty();
-    }
+    // ===== 备份工具（与 PsgsCommand 同款逻辑）=====
 
     private Path uniqueBackupZip(Path backupDir, String playerName, String worldName) {
         try { Files.createDirectories(backupDir); } catch (IOException e) {
@@ -267,10 +220,10 @@ public final class GuildShelterMigrationListener implements Listener {
             }
             return true;
         } catch (RuntimeException e) {
-            logger.warning("[PlayerShelter] 备份zip失败: " + (e.getCause() == null ? e : e.getCause()).getMessage());
+            logger.warning("[PSGS] 备份zip失败: " + (e.getCause() == null ? e : e.getCause()).getMessage());
             return false;
         } catch (IOException e) {
-            logger.warning("[PlayerShelter] 备份zip失败: " + e.getMessage());
+            logger.warning("[PSGS] 备份zip失败: " + e.getMessage());
             return false;
         }
     }
@@ -289,6 +242,6 @@ public final class GuildShelterMigrationListener implements Listener {
 
     private void runMain(Runnable task) {
         if (Bukkit.isPrimaryThread()) task.run();
-        else Bukkit.getScheduler().runTask(psPlugin, task);
+        else Bukkit.getScheduler().runTask(plugin, task);
     }
 }

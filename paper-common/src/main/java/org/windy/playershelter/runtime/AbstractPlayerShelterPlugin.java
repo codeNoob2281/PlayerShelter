@@ -182,12 +182,8 @@ public abstract class AbstractPlayerShelterPlugin extends JavaPlugin {
             getLogger().info("[PlayerShelter] Registered PlaceholderAPI expansion.");
         }
 
-        // GuildShelter 软集成：获得庄园时自动迁移庇护所（config 默认开）
-        if (getConfig().getBoolean("guildshelter-migration.enabled", true)) {
-            org.windy.playershelter.runtime.listener.GuildShelterMigrationListener.tryRegister(
-                    this, api, getLogger());
-        }
-
+        // GuildShelter 软集成（获得庄园时自动迁移庇护所）已拆到独立扩展插件 PlayerShelter-GSBridge：
+        // 主插件不引用任何 org.windy.guildshelter.*，装不装 GS 都不影响本体构建与启动。
         banner(config, economy);
     }
 

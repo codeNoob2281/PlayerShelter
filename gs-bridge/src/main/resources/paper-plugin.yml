@@ -1,0 +1,15 @@
+name: PlayerShelter-GSBridge
+version: ${mod_version}
+main: org.windy.playershelter.gsbridge.PlayerShelterGsBridgePlugin
+api-version: '1.21'
+description: PlayerShelter/GuildShelter 互操作扩展：玩家获得公会庄园时自动把庇护所建筑迁移过去。
+authors: [windy]
+# 依赖：
+#   PlayerShelter 必装（本扩展全靠它的公开 API，apiVersion >= 6）
+#   GuildShelter 可选（缺席时本插件静默待机，不注册任何监听器）
+# load: AFTER = 本扩展在这两个插件之后加载，保证 onEnable 时 API 服务已注册、GS 事件类可见。
+# join-classpath: true —— 两个依赖的类都要能在本插件里直接引用（GS 事件类 / PlayerShelterApi）。
+dependencies:
+  server:
+    PlayerShelter: { load: AFTER, required: true, join-classpath: true }
+    GuildShelter:  { load: AFTER, required: false, join-classpath: true }

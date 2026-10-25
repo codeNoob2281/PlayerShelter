@@ -266,7 +266,56 @@ messages:
     self: "&#ff6b6b你不能给自己留言，输入 /ps board 可以直接查看。"
     success: "留言成功！已发送至 &#ffda75{player} &f的留言板。"
 
+  # 注意：本块必须保持为唯一的 psgs: 节点。YAML 同层重复键会让后者整体覆盖前者，
+  # 之前 migration: 子块就是因为与下方 psgs: 重复而全部失效（走了代码里的硬编码 fallback）。
   psgs:
+    no-permission: "&#ff6b6b你没有进行庇护所迁移的权限。"
+    reload: "已重新读取 &#8ee5eeGuildShelter API&f。"
+    cancel: "迁移操作已取消。"
+    usage:
+      gs-to-ps: "用法：&#8ee5ee/psgs gs-to-ps <玩家>&f；将该玩家的 GS 公会庄园提取为个人的 PS 庇护所。"
+      ps-to-gs: "用法：&#8ee5ee/psgs ps-to-gs <玩家> <目标公会> [--force]&f；将 PS 庇护所迁入至 GS 公会庄园中。"
+    error:
+      no-gs-manor: "&#ff6b6b未找到该玩家可导出的 GuildShelter 公会庄园。"
+      ps-target-too-small: "&#ff6b6b目标 PS 庇护所区域过小，至少需要 {chunks} 区块。"
+      no-ps-shelter: "&#ff6b6b该玩家目前还没有可导出的 PlayerShelter 庇护所。"
+      gs-target-unavailable: "&#ff6b6b目标公会不存在、位置已满、玩家已有庄园，或区域空间不足。"
+      no-pending: "&#ff6b6b当前没有等待确认的迁移操作，或确认已超时（30秒）。"
+      copy-exception: "&#ff6b6b迁移发生异常：{message}"
+      copy-failed: "&#ff6b6b迁移失败：源/目标世界不存在、区块无法加载，或高度不兼容。"
+      gs-commit-failed: "&#ff6b6b区块已复制，但 GS 公会庄园注册失败。请不要重复操作，请先检查目标区域。"
+      gs-api-unavailable: "&#ff6b6b未检测到 GuildShelter API，请确认插件已正常启动。"
+      gs-missing: "&#ff6b6b未安装 GuildShelter，无法使用迁移指令。"
+      gs-api-incompatible: "&#ff6b6bGuildShelter API 版本不兼容，缺少迁移接口：{message}"
+    force:
+      release: "&#8ee5ee--force&f 强制模式：将先解除该玩家的 GS 旧数据；仅删除名额记录，不破坏原有方块。"
+      failed: "&#ff6b6b强制解除失败：无法调用 GuildShelter 接口。"
+      rejected: "&#ff6b6b尝试解除成功，但 GuildShelter 依然拒绝迁入。"
+    warn:
+      copy-nbt: "本次迁移将会保留所有方块与实体 NBT 数据；NeoForge 环境将连同 data/*.dat 一并迁移。"
+    confirm-hint:
+      gs-to-ps: "请在 30 秒内输入 &#8ee5ee/psgs confirm&f 确认操作；源 GS 庄园将被保留。"
+      ps-to-gs: "请在 30 秒内输入 &#8ee5ee/psgs confirm&f 确认操作；源 PS 庇护所将被保留。"
+    copy:
+      start: "正在执行世界迁移！期间请勿关闭或重启服务器。"
+      done: "迁移完成！源区域数据未受影响。"
+    plan:
+      gs-to-ps:
+        ok: "验证通过：&#ffda75公会庄园(GS) &f-> &#8ee5ee庇护所(PS)&f，目标玩家 &#ffda75{player}"
+      ps-to-gs:
+        ok: "验证通过：&#8ee5ee庇护所(PS) &f-> &#ffda75公会庄园(GS)&f，目标玩家 &#ffda75{player}"
+      source-gs: "&f源 GS：&#8ee5ee{world}  &f公会=&#ffda75{guild}  &f位置=&#ffda75{slot}  &f区块=&#ffda75{chunks}"
+      target-gs: "&f目标 GS：&#8ee5ee{world}  &f公会=&#ffda75{guild}  &f位置=&#ffda75{slot}  &f区块=&#ffda75{chunks}"
+      source-ps: "&f源 PS：&#8ee5ee{world}  &f区块=&#ffda75{chunks}"
+      target-ps: "&f目标 PS：&#8ee5ee{world}  &f区块=&#ffda75{chunks}"
+      side: "&f边界大小：&#ffda75{from} &f-> &#ffda75{to} &f区块"
+    help:
+      header: "&#ffda75❖ PlayerShelter / GuildShelter 数据迁移 ❖"
+      gs-to-ps: "&#8ee5ee/psgs gs-to-ps <玩家> &f- 将 GS 庄园迁移至 PS 庇护所"
+      ps-to-gs: "&#8ee5ee/psgs ps-to-gs <玩家> <目标公会> [--force] &f- 将 PS 庇护所迁移至 GS 庄园"
+      confirm: "&#8ee5ee/psgs confirm &f- 确认执行预检的迁移操作"
+      cancel: "&#8ee5ee/psgs cancel &f- 取消当前待确认的操作"
+      reload: "&#8ee5ee/psgs reload &f- 重载 GuildShelter API 数据"
     migration:
       already-running: "已有迁移正在执行，请等待当前迁移完成。"
       background: "迁移已进入后台执行，进度会显示在 bossbar 和后台日志中。"
@@ -369,55 +418,6 @@ messages:
       empty: "&f当前没有已加载的庇护所世界。"
       row: "&8 - &#8ee5ee{world} &f玩家数 &#ffda75{players} &f/ 区块 &#ffda75{chunks} &f/ 实体 &#ffda75{entities} &f/ 方块实体 &#ffda75{tiles} &f/ 强加载 &#ffda75{forced} &f/ 插件票据 &#ffda75{tickets}"
       note: "&8注：这里仅显示 Bukkit/Paper 可见数据；NeoForge 原生的 mod ticket 需要通过其他方式诊断。"
-
-  psgs:
-    no-permission: "&#ff6b6b你没有进行庇护所迁移的权限。"
-    reload: "已重新读取 &#8ee5eeGuildShelter API&f。"
-    cancel: "迁移操作已取消。"
-    usage:
-      gs-to-ps: "用法：&#8ee5ee/psgs gs-to-ps <玩家>&f；将该玩家的 GS 公会庄园提取为个人的 PS 庇护所。"
-      ps-to-gs: "用法：&#8ee5ee/psgs ps-to-gs <玩家> <目标公会> [--force]&f；将 PS 庇护所迁入至 GS 公会庄园中。"
-    error:
-      no-gs-manor: "&#ff6b6b未找到该玩家可导出的 GuildShelter 公会庄园。"
-      ps-target-too-small: "&#ff6b6b目标 PS 庇护所区域过小，至少需要 {chunks} 区块。"
-      no-ps-shelter: "&#ff6b6b该玩家目前还没有可导出的 PlayerShelter 庇护所。"
-      gs-target-unavailable: "&#ff6b6b目标公会不存在、位置已满、玩家已有庄园，或区域空间不足。"
-      no-pending: "&#ff6b6b当前没有等待确认的迁移操作，或确认已超时（30秒）。"
-      copy-exception: "&#ff6b6b迁移发生异常：{message}"
-      copy-failed: "&#ff6b6b迁移失败：源/目标世界不存在、区块无法加载，或高度不兼容。"
-      gs-commit-failed: "&#ff6b6b区块已复制，但 GS 公会庄园注册失败。请不要重复操作，请先检查目标区域。"
-      gs-api-unavailable: "&#ff6b6b未检测到 GuildShelter API，请确认插件已正常启动。"
-      gs-missing: "&#ff6b6b未安装 GuildShelter，无法使用迁移指令。"
-      gs-api-incompatible: "&#ff6b6bGuildShelter API 版本不兼容，缺少迁移接口：{message}"
-    force:
-      release: "&#8ee5ee--force&f 强制模式：将先解除该玩家的 GS 旧数据；仅删除名额记录，不破坏原有方块。"
-      failed: "&#ff6b6b强制解除失败：无法调用 GuildShelter 接口。"
-      rejected: "&#ff6b6b尝试解除成功，但 GuildShelter 依然拒绝迁入。"
-    warn:
-      copy-nbt: "本次迁移将会保留所有方块与实体 NBT 数据；NeoForge 环境将连同 data/*.dat 一并迁移。"
-    confirm-hint:
-      gs-to-ps: "请在 30 秒内输入 &#8ee5ee/psgs confirm&f 确认操作；源 GS 庄园将被保留。"
-      ps-to-gs: "请在 30 秒内输入 &#8ee5ee/psgs confirm&f 确认操作；源 PS 庇护所将被保留。"
-    copy:
-      start: "正在执行世界迁移！期间请勿关闭或重启服务器。"
-      done: "迁移完成！源区域数据未受影响。"
-    plan:
-      gs-to-ps:
-        ok: "验证通过：&#ffda75公会庄园(GS) &f-> &#8ee5ee庇护所(PS)&f，目标玩家 &#ffda75{player}"
-      ps-to-gs:
-        ok: "验证通过：&#8ee5ee庇护所(PS) &f-> &#ffda75公会庄园(GS)&f，目标玩家 &#ffda75{player}"
-      source-gs: "&f源 GS：&#8ee5ee{world}  &f公会=&#ffda75{guild}  &f位置=&#ffda75{slot}  &f区块=&#ffda75{chunks}"
-      target-gs: "&f目标 GS：&#8ee5ee{world}  &f公会=&#ffda75{guild}  &f位置=&#ffda75{slot}  &f区块=&#ffda75{chunks}"
-      source-ps: "&f源 PS：&#8ee5ee{world}  &f区块=&#ffda75{chunks}"
-      target-ps: "&f目标 PS：&#8ee5ee{world}  &f区块=&#ffda75{chunks}"
-      side: "&f边界大小：&#ffda75{from} &f-> &#ffda75{to} &f区块"
-    help:
-      header: "&#ffda75❖ PlayerShelter / GuildShelter 数据迁移 ❖"
-      gs-to-ps: "&#8ee5ee/psgs gs-to-ps <玩家> &f- 将 GS 庄园迁移至 PS 庇护所"
-      ps-to-gs: "&#8ee5ee/psgs ps-to-gs <玩家> <目标公会> [--force] &f- 将 PS 庇护所迁移至 GS 庄园"
-      confirm: "&#8ee5ee/psgs confirm &f- 确认执行预检的迁移操作"
-      cancel: "&#8ee5ee/psgs cancel &f- 取消当前待确认的操作"
-      reload: "&#8ee5ee/psgs reload &f- 重载 GuildShelter API 数据"
 
   router:
     cross-server: "正在将你跨服传送到目标服务器…"

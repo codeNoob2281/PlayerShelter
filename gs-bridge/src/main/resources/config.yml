@@ -1,0 +1,9 @@
+# PlayerShelter-GSBridge 扩展配置
+
+# 玩家获得 GuildShelter 庄园 slot 时，自动把其 PlayerShelter 庇护所建筑迁移到庄园，
+# 成功后备份并删除源庇护所世界。
+# 需要服务器同时安装 PlayerShelter 与 GuildShelter；任一缺席时本插件静默待机。
+enabled: true
+
+# 迁移进度 bossbar 文案前缀（留空用默认 "[PSGS]"）。
+prefix: "[PSGS]"

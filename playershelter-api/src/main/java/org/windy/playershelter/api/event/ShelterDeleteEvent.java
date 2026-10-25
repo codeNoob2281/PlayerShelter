@@ -15,7 +15,9 @@ public final class ShelterDeleteEvent extends Event {
         /** 管理员命令删除（决策 #61）。 */
         ADMIN,
         /** 长期不活跃自动清理（决策 #6）。 */
-        INACTIVE
+        INACTIVE,
+        /** 建筑已迁往其它系统（如 GuildShelter 庄园），源庇护所随迁移收尾删除。 */
+        MIGRATED
     }
 
     private static final HandlerList HANDLERS = new HandlerList();

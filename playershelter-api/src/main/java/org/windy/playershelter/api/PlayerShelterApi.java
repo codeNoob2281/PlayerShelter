@@ -68,6 +68,42 @@ public interface PlayerShelterApi {
                                 String toWorld, int toMinChunkX, int toMinChunkZ);
 
     /**
+     * 异步复制一块迁移区域，带进度回调（apiVersion 6）。
+     *
+     * <p>语义与 {@link #copyMigrationRegion} 完全一致，只是把「在主线程阻塞复制」换成载体自己的异步管线
+     * （NeoForge 增强版逐 chunk 分 tick；Paper 版走 WorldEdit）。附属据此自绘进度条。
+     *
+     * @param progress 进度回调，可能在主线程以外被调用；传 {@code null} 表示不关心
+     * @param whenDone 完成回调，参数为是否复制成功；在主线程调用；传 {@code null} 表示不关心
+     */
+    void copyMigrationRegionAsync(String fromWorld, int fromMinChunkX, int fromMinChunkZ, int sizeChunks,
+                                  String toWorld, int toMinChunkX, int toMinChunkZ,
+                                  java.util.function.Consumer<PlayerShelterMigrationProgress> progress,
+                                  java.util.function.Consumer<Boolean> whenDone);
+
+    /**
+     * 该玩家庇护所世界在磁盘上的目录（apiVersion 6）。
+     *
+     * <p>给附属做迁移前备份用：附属自行压缩/复制，主插件不介入。
+     * 世界已加载时取其 {@code World#getWorldFolder()}，否则按 Bukkit 世界容器约定推断。
+     * 世界名或目录都不存在时返回 empty。
+     */
+    Optional<java.nio.file.Path> shelterWorldFolder(UUID owner);
+
+    /**
+     * 删除该玩家的庇护所（apiVersion 6）：删世界存档文件 + 删库记录，并保留标签/留言。
+     *
+     * <p>给「建筑已成功迁走」这类场景收尾用。会先触发 {@link org.windy.playershelter.api.event.ShelterDeleteEvent}
+     * （原因为 {@code MIGRATED}）。须在主线程调用（要删世界文件）。
+     *
+     * @return 世界文件与记录是否都已删除（世界本就不存在也算成功）
+     */
+    boolean deleteShelter(UUID owner);
+
+    /** 主插件数据目录（apiVersion 6）：附属可把备份放进同一个 {@code backup/} 目录，便于服主统一查找。 */
+    java.nio.file.Path dataFolder();
+
+    /**
      * Register a protection decision provider. Lower priority runs first.
      * Any DENY denies; otherwise any ALLOW allows when the built-in decision would deny.
      */

@@ -17,10 +17,12 @@ dependencies {
     compileOnly 'me.clip:placeholderapi:2.11.5'
     compileOnly 'com.github.MilkBowl:VaultAPI:1.7.1'
 
-    // Iris 维度引擎 API + GuildShelter API：走本地 libs/（不上传 GitHub），自动收进编译 classpath。
+    // Iris 维度引擎 API：走本地 libs/（不上传 GitHub），自动收进编译 classpath。
+    // 铁律：GuildShelter API 不进本模块 —— 它被关在独立扩展模块 :gs-bridge 里，
+    // 主插件本体不依赖 GS jar 也能构建（libs/ 里没有 guildshelter-*.jar 照样编得过）。
     compileOnly rootProject.fileTree('libs') {
         include '*.jar'
-        exclude 'minecraft-server-patched*', 'neoforge-*', 'worldedit-*'
+        exclude 'minecraft-server-patched*', 'neoforge-*', 'worldedit-*', 'guildshelter-*'
     }
 
     compileOnly 'com.zaxxer:HikariCP:5.0.0'

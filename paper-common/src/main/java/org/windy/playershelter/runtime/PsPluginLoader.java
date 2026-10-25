@@ -18,8 +18,10 @@ public final class PsPluginLoader implements PluginLoader {
     @Override
     public void classloader(PluginClasspathBuilder classpath) {
         MavenLibraryResolver resolver = new MavenLibraryResolver();
+        // Paper 1.21.11+ 禁止直连 Maven Central（违反其 ToS，会抛 RuntimeException 导致插件加载失败），
+        // 必须用官方镜像常量。
         resolver.addRepository(new RemoteRepository.Builder(
-                "central", "default", "https://repo.maven.apache.org/maven2/").build());
+                "central", "default", MavenLibraryResolver.MAVEN_CENTRAL_DEFAULT_MIRROR).build());
         resolver.addDependency(new Dependency(new DefaultArtifact("com.zaxxer:HikariCP:5.0.0"), null));
         resolver.addDependency(new Dependency(new DefaultArtifact("org.xerial:sqlite-jdbc:3.47.1.0"), null));
         resolver.addDependency(new Dependency(new DefaultArtifact("com.mysql:mysql-connector-j:8.4.0"), null));

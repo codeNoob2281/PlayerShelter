@@ -1,0 +1,56 @@
+// gs-bridge：PlayerShelter ↔ GuildShelter 互操作扩展（独立扩展 jar）。
+//
+// 为什么要拆出来：GuildShelter 的 API jar 是本地私有的（libs/，不上传 GitHub），
+// 放在主插件里会让「构建插件本体」被迫依赖它。这里把它关进独立模块：
+//   · 主插件完全不认识 org.windy.guildshelter.*，libs/ 缺失也能正常构建；
+//   · 服务器装了这个 jar 才启用自动迁移，不装就没这段代码。
+//
+// 编译期只 compileOnly：GS API 由服务端上的 GuildShelter 插件提供，
+// PlayerShelterApi 由主插件 jar 提供（两个都在 paper-plugin.yml 里 join-classpath）。
+// 本模块无运行时依赖 → 不需要 shadow，普通 jar 即是最终产物。
+
+base {
+    archivesName = 'playershelter-gs-bridge'
+}
+
+dependencies {
+    compileOnly 'io.papermc.paper:paper-api:1.21.1-R0.1-SNAPSHOT'
+    compileOnly project(':playershelter-api')   // 只吃公开 API，不碰主插件内部实现
+    compileOnly rootProject.fileTree('libs') {
+        include 'guildshelter-api-*.jar'
+    }
+}
+
+// plugin.yml 占位替换。取值放在闭包外：配置缓存不允许执行期引用 project 脚本对象。
+// 版本串带上 git short hash + -dirty，便于在服务器上确认装的是哪个构建。
+def baseVer = project.version.toString()
+def modName = (rootProject.findProperty('mod_name') ?: 'PlayerShelter').toString()
+def repoDir = rootProject.rootDir
+
+processResources {
+    outputs.upToDateWhen { false }
+    filesMatching('paper-plugin.yml') {
+        def git = { String... cmd ->
+            try {
+                def p = new ProcessBuilder(cmd).directory(repoDir).redirectErrorStream(true).start()
+                def out = p.inputStream.getText('UTF-8').trim()
+                p.waitFor()
+                return p.exitValue() == 0 ? out : null
+            } catch (ignored) { return null }
+        }
+        def hash = git('git', 'rev-parse', '--short', 'HEAD')
+        def gitMeta
+        if (hash == null) {
+            gitMeta = 'nogit'
+        } else {
+            def status = git('git', 'status', '--porcelain')
+            gitMeta = hash + ((status != null && !status.isEmpty()) ? '-dirty' : '')
+        }
+        def fmt = new java.text.SimpleDateFormat('yyyy-MM-dd HH:mm')
+        fmt.timeZone = TimeZone.getTimeZone('Asia/Shanghai')
+        expand([
+                mod_version: "${baseVer}+${gitMeta}".toString(),
+                mod_name   : modName
+        ])
+    }
+}

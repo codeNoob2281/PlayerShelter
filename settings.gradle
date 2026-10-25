@@ -22,6 +22,14 @@ include 'playershelter-api' // 对外扩展 API（纯接口+DTO+事件，第三�
 include 'core'             // domain · service · persistence（平台无关纯 Java）
 include 'paper-common'     // adapter/** · 接缝接口+Paper 默认实现 · 抽象引导（禁 net.neoforged）
 include 'paper'            // 普通版：纯 Paper 插件 jar
+// GuildShelter 互操作扩展（独立扩展 jar）。只有 libs/ 里放了 guildshelter-api-*.jar 才纳入构建，
+// 这样「构建插件本体」永远不依赖 GS API（没有该 jar 时 gradle 连这个模块都不认识）。
+def gsApiJar = (new File(settingsDir, 'libs').listFiles() ?: []).find {
+    it.name.startsWith('guildshelter-api-') && it.name.endsWith('.jar')
+}
+if (gsApiJar != null) {
+    include 'gs-bridge'    // 独立扩展：GuildShelter 自动迁移（依赖 GS API，仅 compileOnly）
+}
 // neoforge 载体目录在 .gitignore 里（本地增强版），只在本机存在时纳入构建。
 if (file('neoforge_26_2/build.gradle').exists()) {
     include 'neoforge_26_2' // 本地增强版：混合端(NeoForge 26.2)原生接缝 jar
