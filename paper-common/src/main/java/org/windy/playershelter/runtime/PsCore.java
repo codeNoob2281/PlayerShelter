@@ -13,6 +13,7 @@ import org.windy.playershelter.domain.port.ShelterRepository;
 import org.windy.playershelter.domain.port.TagStore;
 import org.windy.playershelter.domain.port.WorldControl;
 import org.windy.playershelter.runtime.api.BuildCheckRegistry;
+import org.windy.playershelter.runtime.api.TerrainProviderRegistry;
 import org.windy.playershelter.service.ShelterConfig;
 import org.windy.playershelter.service.ShelterService;
 import org.windy.playershelter.service.WorldLifecycleService;
@@ -38,6 +39,7 @@ public final class PsCore {
     private final TagStore tags;
     private final MessageBoardStore board;
     private final BuildCheckRegistry buildChecks;
+    private final TerrainProviderRegistry terrainProviders;
     private final RegionMover regionMover;
 
     public PsCore(JavaPlugin plugin, ShelterRepository repo, WorldControl world, DirectoryPort directory,
@@ -45,7 +47,7 @@ public final class PsCore {
                   ShelterConfig config, SafeLanding safeLanding, PendingActionStore pending,
                   ServerTransfer transfer, boolean crossServer, LimitEnforcer limits,
                   TagStore tags, MessageBoardStore board, BuildCheckRegistry buildChecks,
-                  RegionMover regionMover) {
+                  TerrainProviderRegistry terrainProviders, RegionMover regionMover) {
         this.plugin = plugin;
         this.repo = repo;
         this.world = world;
@@ -62,6 +64,7 @@ public final class PsCore {
         this.tags = tags;
         this.board = board;
         this.buildChecks = buildChecks;
+        this.terrainProviders = terrainProviders;
         this.regionMover = regionMover;
     }
 
@@ -80,6 +83,7 @@ public final class PsCore {
     public TagStore tags() { return tags; }
     public MessageBoardStore board() { return board; }
     public BuildCheckRegistry buildChecks() { return buildChecks; }
+    public TerrainProviderRegistry terrainProviders() { return terrainProviders; }
     public RegionMover regionMover() { return regionMover; }
 
     /** 是否启用跨服模式（config.yml cross_server=true 且 server.yml 本服名非空）。 */

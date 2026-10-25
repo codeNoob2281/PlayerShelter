@@ -104,6 +104,20 @@ public interface PlayerShelterApi {
     java.nio.file.Path dataFolder();
 
     /**
+     * 注册地形生成 provider（apiVersion 7）。
+     *
+     * <p>主插件建 NATURAL 世界时按 {@code priority()} 从低到高询问已注册 provider，第一个
+     * {@code supports()} 返回 true 的负责生成；全部不认领则走原版 vanilla normal。
+     * 这意味着「主插件本体不认识 Iris」——Iris 支持由扩展插件在 onEnable 里注册一个 provider 实现。
+     *
+     * <p>{@code plugin} 仅作为归属标记：该插件被禁用时其 provider 自动失效。
+     */
+    void registerTerrainProvider(org.bukkit.plugin.Plugin plugin, org.windy.playershelter.api.terrain.TerrainProvider provider);
+
+    /** 注销某插件注册的全部地形 provider（apiVersion 7）。 */
+    void unregisterTerrainProviders(org.bukkit.plugin.Plugin plugin);
+
+    /**
      * Register a protection decision provider. Lower priority runs first.
      * Any DENY denies; otherwise any ALLOW allows when the built-in decision would deny.
      */

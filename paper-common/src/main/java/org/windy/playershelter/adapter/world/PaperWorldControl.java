@@ -12,9 +12,12 @@ import org.bukkit.WorldCreator;
 import org.bukkit.WorldType;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
+import org.windy.playershelter.api.terrain.TerrainProvider;
+import org.windy.playershelter.api.terrain.TerrainRequest;
 import org.windy.playershelter.domain.model.GenerationType;
 import org.windy.playershelter.domain.model.Shelter;
 import org.windy.playershelter.domain.port.WorldControl;
+import org.windy.playershelter.runtime.api.TerrainProviderRegistry;
 
 import java.io.File;
 import java.io.IOException;
@@ -25,6 +28,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -33,16 +37,16 @@ import java.util.stream.Stream;
 /**
  * {@link WorldControl} 的 Paper 实现（走 org.bukkit API，普通版载体）。
  *
- * <p>生成类型分流（决策 #1）：
+ * <p>生成类型分流：
  * <ul>
- * <li>{@link GenerationType#NATURAL}：Iris 在场用 Iris 异步管线（见 {@link #ensureWorldAsync}），缺席回退原版 normal。</li>
+ * <li>{@link GenerationType#NATURAL}：有地形 provider 认领时交给它（如独立的 Iris 扩展插件），
+ * 无人认领或 provider 失败则回退原版 normal。主插件本体<b>不认识任何地形引擎</b>。</li>
  * <li>{@link GenerationType#FLAT}：超平坦，generatorSettings 走 JSON（MC1.16+ 要求，见 [[mc-flat-generatorsettings-json]]）。</li>
  * <li>{@link GenerationType#VOID}：原版 FLAT + 空层超平坦（{@code VOID_SETTINGS_JSON}）+ 出生点摆起始小岛（决策 #45）。</li>
  * </ul>
  *
  * <p><b>混合端友好</b>：FLAT/VOID 均用<b>原版超平坦生成器</b>（非 Bukkit 自定义 {@code ChunkGenerator}），
  * 故在 Youer 混合端也能正常生成——绕开了「混合端不 honor 自定义 ChunkGenerator」的坑，无需 NeoForge 原生维度。
- * NATURAL 经 Iris（在场）或原版 normal。
  */
 public final class PaperWorldControl implements WorldControl {
 
@@ -66,44 +70,33 @@ public final class PaperWorldControl implements WorldControl {
     private final Logger log;
     private final Material platformMaterial;
     private final SafeLanding safeLanding;
-    private final boolean irisEnabled;
-    private final String irisDimension;
+    private final TerrainProviderRegistry terrainProviders;
     private final Map<String, String> gamerules;
     private final int viewDistance;
     private final int simulationDistance;
 
     public PaperWorldControl(Plugin plugin, Logger log, Material platformMaterial,
-                             boolean irisEnabled, String irisDimension, boolean keepInventory) {
-        this(plugin, log, platformMaterial, irisEnabled, irisDimension,
+                             TerrainProviderRegistry terrainProviders, boolean keepInventory) {
+        this(plugin, log, platformMaterial, terrainProviders,
                 keepInventory ? Map.of("keep_inventory", "true") : Map.of(), 6, 4);
     }
 
     public PaperWorldControl(Plugin plugin, Logger log, Material platformMaterial,
-                             boolean irisEnabled, String irisDimension, Map<String, String> gamerules) {
-        this(plugin, log, platformMaterial, irisEnabled, irisDimension, gamerules, 6, 4);
+                             TerrainProviderRegistry terrainProviders, Map<String, String> gamerules) {
+        this(plugin, log, platformMaterial, terrainProviders, gamerules, 6, 4);
     }
 
     public PaperWorldControl(Plugin plugin, Logger log, Material platformMaterial,
-                             boolean irisEnabled, String irisDimension, Map<String, String> gamerules,
+                             TerrainProviderRegistry terrainProviders, Map<String, String> gamerules,
                              int viewDistance, int simulationDistance) {
         this.plugin = plugin;
         this.log = log;
         this.platformMaterial = platformMaterial == null ? Material.GLASS : platformMaterial;
         this.safeLanding = new SafeLanding(this.platformMaterial);
-        this.irisEnabled = irisEnabled;
-        this.irisDimension = (irisDimension == null || irisDimension.isBlank()) ? "overworld" : irisDimension;
+        this.terrainProviders = terrainProviders;
         this.gamerules = gamerules == null ? Map.of() : Map.copyOf(gamerules);
         this.viewDistance = clampPaperDistance(viewDistance, 6);
         this.simulationDistance = clampPaperDistance(simulationDistance, 4);
-    }
-
-    /** Iris 是否在场且启用（轻量判断，不构建生成器）。 */
-    private boolean irisActive() {
-        if (!irisEnabled) {
-            return false;
-        }
-        Plugin p = Bukkit.getPluginManager().getPlugin("Iris");
-        return p != null && p.isEnabled();
     }
 
     @Override
@@ -181,67 +174,125 @@ public final class PaperWorldControl implements WorldControl {
         if (centerVoid || farVoid) {
             log.warning("[PlayerShelter] ⚠ 该 NATURAL 世界地形疑似未生成（多处为虚空高度）。"
                     + "混合端(Youer/NeoForge)常不为 Bukkit 建的普通世界挂模组地形生成器 → 会是空世界。");
-            log.warning("[PlayerShelter]   解决：① 安装 Iris 插件（本插件会自动用 Iris 异步真实生成 NATURAL）；"
+            log.warning("[PlayerShelter]   解决：① 安装地形生成扩展（如 Iris 扩展插件，注册 TerrainProvider 后自动接管）；"
                     + "② 或用 /ps create flat|void（原版超平坦，混合端可靠生成）。");
         }
     }
 
     /**
-     * 覆盖异步建世界（决策 #1 Iris 优先 / #26 进度条）：NATURAL 且 Iris 在场且世界未建 → 走 Iris 异步管线
-     * （避免 {@code Bukkit.createWorld} 主线程冻服）；否则走默认同步路径（FLAT/VOID/无 Iris/已存在）。
+     * 覆盖建世界（决策 #26 进度条）：NATURAL 且有地形 provider 认领时，交由 provider 生成
+     * （provider 可自行异步，如 Iris）；否则调用 {@code super} 走默认实现——
+     * <b>即 FLAT/VOID/无人认领/已加载/plugin 缺失/provider 故障等所有回退路径都在调用线程同步建完</b>，
+     * 因为原版 {@code WorldCreator} 必须主线程（见 {@link WorldControl#ensureWorldAsync}）。
      *
-     * <p>Iris 建世界须在异步线程调（Iris 内部 submit 回主线程做 addLevel），建好回主线程设出生点+边界+onReady。
+     * <p>provider 失败（认领后抛异常或 future 异常完成）时<b>回退原版 vanilla</b>，只记警告——
+     * 扩展出问题不该让玩家建不了家园。
      */
     @SuppressWarnings("unchecked") // 压制 Registry 获取时的泛型强转警告
     @Override
     public void ensureWorldAsync(Shelter shelter, UUID progressAudience,
                                  Consumer<Shelter> onReady, Runnable onError) {
         String name = shelter.worldName();
-        boolean irisNeedsAsync = shelter.genType() == GenerationType.NATURAL
-                && irisActive()
+        boolean delegable = shelter.genType() == GenerationType.NATURAL
+                && terrainProviders != null
                 && Bukkit.getWorld(name) == null;
-        if (!irisNeedsAsync) {
+        if (!delegable) {
+            WorldControl.super.ensureWorldAsync(shelter, progressAudience, onReady, onError);
+            return;
+        }
+
+        boolean freshBuild = !worldFolderExists(name);
+        TerrainRequest request = new TerrainRequest(name, shelter.seed(), freshBuild, progressAudience,
+                "paper", shelter.genType().name().toLowerCase(java.util.Locale.ROOT));
+        TerrainProvider provider;
+        try {
+            provider = terrainProviders.select(request);
+        } catch (Throwable t) {
+            provider = null;
+        }
+        if (provider == null) {
             WorldControl.super.ensureWorldAsync(shelter, progressAudience, onReady, onError);
             return;
         }
         if (plugin == null) {
-            log.severe("[PlayerShelter] 建 Iris 世界需异步调度但未注入 plugin，回退同步。");
+            log.severe("[PlayerShelter] 地形 provider 需异步调度但未注入 plugin，回退原版生成。");
             WorldControl.super.ensureWorldAsync(shelter, progressAudience, onReady, onError);
             return;
         }
-        boolean freshBuild = !worldFolderExists(name);
-        Player audience = progressAudience != null ? Bukkit.getPlayer(progressAudience) : null;
-        log.info("[PlayerShelter] " + (freshBuild ? "创建" : "重载") + " Iris 世界(维度 '" + irisDimension + "'): " + name
-                + (audience != null ? "（进度→" + audience.getName() + "）" : ""));
 
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-            final World w;
-            try {
-                w = IrisSupport.createWorld(name, irisDimension, shelter.seed(), audience);
-            } catch (Throwable t) {
-                log.severe("[PlayerShelter] Iris 建/载世界失败: " + t.getMessage());
-                Bukkit.getScheduler().runTask(plugin, onError);
+        log.info("[PlayerShelter] " + (freshBuild ? "创建" : "重载") + " 世界(由 provider '" + provider.id() + "' 生成): "
+                + name);
+
+        final TerrainProvider owner = provider;
+        CompletableFuture<World> future;
+        try {
+            future = owner.generateAsync(request);
+        } catch (Throwable t) {
+            log.warning("[PlayerShelter] 地形 provider '" + owner.id() + "' 生成失败，回退原版: " + t.getMessage());
+            WorldControl.super.ensureWorldAsync(shelter, progressAudience, onReady, onError);
+            return;
+        }
+        if (future == null) {
+            log.warning("[PlayerShelter] 地形 provider '" + owner.id() + "' 返回 null future，回退原版。");
+            WorldControl.super.ensureWorldAsync(shelter, progressAudience, onReady, onError);
+            return;
+        }
+
+        future.whenComplete((w, error) -> runOnMain(() -> {
+            if (error != null || w == null) {
+                log.warning("[PlayerShelter] 地形 provider '" + owner.id() + "' 生成失败，回退原版: "
+                        + (error == null ? "返回 null 世界" : String.valueOf(error.getMessage())));
+                WorldControl.super.ensureWorldAsync(shelter, progressAudience, onReady, onError);
                 return;
             }
-            Bukkit.getScheduler().runTask(plugin, () -> {
-
-                // 1.21 注册表：取消常加载
-                GameRule<Integer> spawnRadius = (GameRule<Integer>) lookupGameRule("spawn_chunk_radius");
-                if (spawnRadius != null) {
-                    w.setGameRule(spawnRadius, 0);
-                }
-                applyPaperWorldTuning(w);
-
-                if (freshBuild) {
-                    Location spawn = safeLanding.resolve(w, 8, 8);
-                    w.setSpawnLocation(spawn.getBlockX(), spawn.getBlockY(), spawn.getBlockZ());
-                    applyConfiguredGameRules(w);
-                }
-
-                applyBorder(shelter);
+            try {
+                finishGeneratedWorld(shelter, w, freshBuild);
                 onReady.accept(shelter);
-            });
-        });
+            } catch (Throwable t) {
+                log.severe("[PlayerShelter] 世界后处理失败: " + t.getMessage());
+                onError.run();
+            }
+        }));
+    }
+
+    /**
+     * provider 交出已加载世界后的统一后处理：取消常加载、应用世界参数、出生点、gamerule、边界。
+     * 与同步 {@link #ensureWorld} 的收尾保持一致，避免两条路径行为漂移。
+     */
+    @SuppressWarnings("unchecked")
+    private void finishGeneratedWorld(Shelter shelter, World world, boolean freshBuild) {
+        GameRule<Integer> spawnRadius = (GameRule<Integer>) lookupGameRule("spawn_chunk_radius");
+        if (spawnRadius != null) {
+            world.setGameRule(spawnRadius, 0);
+        }
+        applyPaperWorldTuning(world);
+        world.setSpawnFlags(true, true);
+
+        if (freshBuild) {
+            Location spawn = safeLanding.resolve(world, 8, 8);
+            world.setSpawnLocation(spawn.getBlockX(), spawn.getBlockY(), spawn.getBlockZ());
+            applyConfiguredGameRules(world);
+        }
+        applyBorder(shelter);
+        log.info("[PlayerShelter] 庇护所世界就绪 " + world.getName() + " (" + shelter.genType() + ")");
+    }
+
+    /** provider 的回调线程不确定，统一切回主线程。 */
+    private void runOnMain(Runnable task) {
+        if (Bukkit.isPrimaryThread()) {
+            task.run();
+            return;
+        }
+        if (plugin == null) {
+            task.run();
+            return;
+        }
+        try {
+            Bukkit.getScheduler().runTask(plugin, task);
+        } catch (IllegalStateException e) {
+            // 插件正在卸载，调度器已关：直接跑，失败也无所谓
+            task.run();
+        }
     }
 
     // 兼容层：26.2 起 gamerule 走注册表 Registry.GAME_RULE；1.21.1 及更早只有 GameRule.getByName（camelCase）。
@@ -438,14 +489,10 @@ public final class PaperWorldControl implements WorldControl {
         return out;
     }
 
-    /** Iris 世界惰性生成（决策 #31：扩界不预生成，玩家走到哪 Iris 生成到哪）。 */
+    /** 该世界是否惰性生成（由注册的地形 provider 声明；无 provider 则为 false）。 */
     @Override
     public boolean lazilyGenerated(String worldName) {
-        if (!irisActive()) {
-            return false;
-        }
-        World w = Bukkit.getWorld(worldName);
-        return w != null && IrisSupport.isIrisWorld(w);
+        return terrainProviders != null && terrainProviders.lazilyGenerated(worldName);
     }
 
     /** 世界存档目录是否已存在（判首建 vs 加载）。查所有候选位置（含混合端 dimensions 目录）。 */
@@ -458,7 +505,7 @@ public final class PaperWorldControl implements WorldControl {
         return false;
     }
 
-    /** 给 Iris 世界用的安全落点（出生点 0,0 处铺站脚台，惰性世界传送时触发单区块生成）。 */
+    /** 惰性世界（玩家走到哪生成到哪）用的安全落点：出生点处铺站脚台，传送时触发单区块生成。 */
     public Location safeSpawn(World world) {
         Location s = world.getSpawnLocation();
         return safeLanding.resolve(world, s.getBlockX(), s.getBlockZ());

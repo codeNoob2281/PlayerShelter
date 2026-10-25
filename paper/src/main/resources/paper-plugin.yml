@@ -7,14 +7,14 @@ api-version: '1.21'
 description: 一人一世界：每个玩家拥有一个独立世界，等级越高边界越大。
 authors: [windy]
 # 软依赖（全程经端口适配，缺席静默降级）。Paper 原生插件是隔离类加载器：
-#   凡代码里会直接引用其类的（Iris/Vault/PlaceholderAPI）必须 join-classpath: true，否则 NoClassDefFound。
+#   凡代码里会直接引用其类的（Vault/PlaceholderAPI）必须 join-classpath: true，否则 NoClassDefFound。
 #   只经 Bukkit API/服务间接用到的（WorldEdit/FAWE）无需并入 classpath。
 #   load: AFTER = 本插件在这些依赖之后加载，保证 onEnable 时它们已就绪。
+#   注：地形引擎（Iris 等）不再是本插件的依赖——由扩展插件注册 TerrainProvider 接管。
 dependencies:
   server:
     Vault:              { load: AFTER, required: false, join-classpath: true }
     PlaceholderAPI:     { load: AFTER, required: false, join-classpath: true }
-    Iris:               { load: AFTER, required: false, join-classpath: true }
     GuildShelter:       { load: AFTER, required: false, join-classpath: true }
     WorldEdit:          { load: AFTER, required: false, join-classpath: false }
     FastAsyncWorldEdit: { load: AFTER, required: false, join-classpath: false }

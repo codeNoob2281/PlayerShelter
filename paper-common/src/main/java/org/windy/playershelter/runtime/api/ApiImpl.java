@@ -24,7 +24,7 @@ import java.util.function.Consumer;
 public final class ApiImpl implements PlayerShelterApi {
 
     /** API 版本号（破坏性变更 +1）。 */
-    public static final int VERSION = 6; // v5：migration region copy API；v6：异步复制 + 备份收尾 API
+    public static final int VERSION = 7; // v5：迁移区域复制；v6：异步复制+备份收尾；v7：地形生成 provider
 
     private final PsCore core;
 
@@ -152,6 +152,19 @@ public final class ApiImpl implements PlayerShelterApi {
     @Override
     public Path dataFolder() {
         return core.plugin().getDataFolder().toPath();
+    }
+
+    @Override
+    public void registerTerrainProvider(org.bukkit.plugin.Plugin plugin,
+                                       org.windy.playershelter.api.terrain.TerrainProvider provider) {
+        core.terrainProviders().register(plugin, provider);
+        core.plugin().getLogger().info("[PlayerShelter] 已注册地形生成 provider: " + provider.id()
+                + " (来自 " + plugin.getName() + ")");
+    }
+
+    @Override
+    public void unregisterTerrainProviders(org.bukkit.plugin.Plugin plugin) {
+        core.terrainProviders().unregister(plugin);
     }
 
     @Override

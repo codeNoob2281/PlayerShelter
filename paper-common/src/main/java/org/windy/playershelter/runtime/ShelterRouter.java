@@ -10,7 +10,7 @@ import org.windy.playershelter.domain.model.Shelter;
 /**
  * 把玩家送进某个庇护所——单服直接传送，跨服先写交接待办再让代理换服（决策 #57/#59）。
  *
- * <p>本服承载（{@link PsCore#isLocal})：异步确保世界加载（Iris 走异步管线）→ 安全落点传送。
+ * <p>本服承载（{@link PsCore#isLocal})：异步确保世界加载（地形 provider 走异步管线）→ 安全落点传送。
  * 他服承载：写 {@code ps_pending}（到站消费）→ {@link org.windy.playershelter.adapter.proxy.ServerTransfer}
  * 经 BungeeCord 通道把人 Connect 过去。目标后端在 join 时由 {@link org.windy.playershelter.runtime.listener.LifecycleListener}
  * 读出待办、把人传进对应庇护所。

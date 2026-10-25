@@ -1,0 +1,20 @@
+name: PlayerShelter-IrisBridge
+version: ${mod_version}
+main: org.windy.playershelter.irisbridge.PlayerShelterIrisBridgePlugin
+api-version: '1.21'
+description: PlayerShelter 的 Iris 地形生成扩展：用 Iris 维度生成庇护所世界（含惰性生成）。
+authors: [windy]
+# 依赖：
+#   PlayerShelter 必装（注册 TerrainProvider 的宿主，apiVersion >= 7）
+#   Iris 必装（本扩展的全部意义所在）
+#
+# load 语义（Paper 文档，极易写反）：
+#   BEFORE = 该依赖【先于】本插件加载 —— 本插件加载时其类已在 classpath 上可用。
+#   AFTER  = 该依赖【后于】本插件加载 —— 本插件加载时它还不在。
+# 本插件主类一加载就 implements TerrainProvider，所以两个依赖都必须是 BEFORE，
+# 否则启动即 NoClassDefFoundError。
+# join-classpath: true —— 把依赖的类并入本插件类加载器，否则看不见。
+dependencies:
+  server:
+    PlayerShelter: { load: BEFORE, required: true, join-classpath: true }
+    Iris:          { load: BEFORE, required: true, join-classpath: true }

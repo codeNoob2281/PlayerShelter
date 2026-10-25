@@ -1,0 +1,9 @@
+# PlayerShelter-IrisBridge 扩展配置
+
+# NATURAL 庇护所世界是否用 Iris 生成。
+# false = 完全不接管，回退主插件原版生成行为。
+enabled: true
+
+# 使用哪个 Iris 维度包名生成庇护所世界。
+# 可以是任意已在线（Iris/packs）里的维度名，常见默认是 overworld。
+dimension: overworld

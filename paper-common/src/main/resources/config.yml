@@ -26,10 +26,9 @@ migration:
 directory:
   public-min-level: 3
 
-generation:
-  iris:
-    enabled: true
-    dimension: overworld
+# 地形生成：主插件默认用原版生成（NATURAL = 原版 normal）。
+# 想要 Iris 等自定义地形，安装对应的地形扩展插件（注册 TerrainProvider）即可，主插件本体不认识任何地形引擎。
+# 旧的 generation.iris.* 配置已随 Iris 支持一起移出，改在扩展插件自己的 config.yml 里配。
 
 world:
   gamerules:

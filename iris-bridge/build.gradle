@@ -1,0 +1,48 @@
+// iris-bridge：Iris 地形生成扩展（独立扩展 jar）。
+//
+// 为什么要拆出来：主插件本体不该认识任何地形引擎。这里把 Iris 支持关进独立模块，
+// 主插件只留一个 TerrainProvider SPI（playershelter-api v7）。
+//   · 主插件完全不认识 art.arcane.iris.*，libs/ 里没有 Iris jar 也能正常构建；
+//   · 服务器装了这个 jar 且装了 Iris 才接管 NATURAL 世界生成，不装就走原版。
+//
+// 编译期只 compileOnly：Iris 由服务端上的 Iris 插件提供，PlayerShelterApi 由主插件 jar 提供。
+// 本模块无运行时依赖 → 不需要 shadow，普通 jar 即是最终产物。
+
+base {
+    archivesName = 'playershelter-iris-bridge'
+}
+
+dependencies {
+    compileOnly 'io.papermc.paper:paper-api:1.21.1-R0.1-SNAPSHOT'
+    compileOnly project(':playershelter-api')   // 只吃公开 API，不碰主插件内部实现
+    compileOnly rootProject.fileTree('libs') {
+        include 'iris-*.jar'
+    }
+}
+
+// plugin.yml 占位替换。取值放在闭包外：配置缓存不允许执行期引用 project 脚本对象。
+def baseVer = project.version.toString()
+def repoDir = rootProject.rootDir
+
+processResources {
+    outputs.upToDateWhen { false }
+    filesMatching('paper-plugin.yml') {
+        def git = { String... cmd ->
+            try {
+                def p = new ProcessBuilder(cmd).directory(repoDir).redirectErrorStream(true).start()
+                def out = p.inputStream.getText('UTF-8').trim()
+                p.waitFor()
+                return p.exitValue() == 0 ? out : null
+            } catch (ignored) { return null }
+        }
+        def hash = git('git', 'rev-parse', '--short', 'HEAD')
+        def gitMeta
+        if (hash == null) {
+            gitMeta = 'nogit'
+        } else {
+            def status = git('git', 'status', '--porcelain')
+            gitMeta = hash + ((status != null && !status.isEmpty()) ? '-dirty' : '')
+        }
+        expand([mod_version: "${baseVer}+${gitMeta}".toString()])
+    }
+}

@@ -43,6 +43,12 @@ public abstract class AbstractPlayerShelterPlugin extends JavaPlugin {
     private ServerTransfer transfer;
     private PlayerShelterExpansion papiExpansion;
     private PsCore core;
+    /**
+     * 地形 provider 注册表。必须在 {@link #createBindings} <b>之前</b>建好：
+     * WorldControl 的实现（如 PaperWorldControl）构造时就要拿到它，而 PsCore 是之后才装配的。
+     */
+    private final org.windy.playershelter.runtime.api.TerrainProviderRegistry terrainProviders =
+            new org.windy.playershelter.runtime.api.TerrainProviderRegistry();
 
     private static volatile ShelterProtection PROTECTION;
     private static volatile PsCore CORE0;
@@ -63,6 +69,11 @@ public abstract class AbstractPlayerShelterPlugin extends JavaPlugin {
 
     protected boolean registerPaperWorldMonitor() {
         return true;
+    }
+
+    /** 地形 provider 注册表（WorldControl 实现构造时用）。 */
+    protected final org.windy.playershelter.runtime.api.TerrainProviderRegistry terrainProviders() {
+        return terrainProviders;
     }
 
     @Override
@@ -142,7 +153,8 @@ public abstract class AbstractPlayerShelterPlugin extends JavaPlugin {
 
         this.core = new PsCore(this, repo, world, directory, economy, shelterService, lifecycle, config,
                 safeLanding, pending, transfer, crossServer, limits, tags, board,
-                new org.windy.playershelter.runtime.api.BuildCheckRegistry(), bindings.regionMover());
+                new org.windy.playershelter.runtime.api.BuildCheckRegistry(), terrainProviders,
+                bindings.regionMover());
 
         PROTECTION = new ShelterProtection(core);
         CORE0 = core;

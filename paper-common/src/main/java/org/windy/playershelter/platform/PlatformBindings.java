@@ -9,7 +9,8 @@ import org.windy.playershelter.domain.port.WorldControl;
  *
  * <p>当前最关键的分流点是 {@link WorldControl}：
  * <ul>
- *   <li>普通版 → Bukkit/Iris 建世界（混合端上超平坦/虚空可能生不出，仅普通服有效）。</li>
+ *   <li>普通版 → Bukkit 原版生成建世界（混合端上超平坦/虚空可能生不出，仅普通服有效）；
+ *       NATURAL 可交给扩展注册的地形 provider 接管。</li>
  *   <li>增强版 → NeoForge 动态维度 + 原生 ChunkGenerator（M7；绕开 Youer 不 honor Bukkit ChunkGenerator）。</li>
  * </ul>
  *

@@ -18,8 +18,9 @@ public final class PlayerShelterPaperPlugin extends AbstractPlayerShelterPlugin 
     @Override
     protected PlatformBindings createBindings(PluginConfig config) {
         Material platform = platformMaterialOf(config);
+        // 地形引擎（Iris 等）由扩展插件注册 TerrainProvider 接管；本载体只提供原版默认行为。
         WorldControl wc = new PaperWorldControl(this, getLogger(), platform,
-                config.irisEnabled(), config.irisDimension(), config.gamerules(),
+                terrainProviders(), config.gamerules(),
                 config.shelterWorldViewDistance(), config.shelterWorldSimulationDistance());
         RegionMover mover = new LazyWorldEditRegionMover(getLogger());
         return new PlatformBindings() {

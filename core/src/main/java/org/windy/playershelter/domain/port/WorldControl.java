@@ -11,7 +11,8 @@ import java.util.function.Consumer;
  * <p><b>为什么是端口</b>：Youer(Spigot 系混合端) <b>不 honor Bukkit 自定义 {@code ChunkGenerator}</b>，
  * 世界生成由 NeoForge/原版引擎驱动。所以：
  * <ul>
- *   <li>普通版（bukkit）：用 Bukkit/Iris 建世界（超平坦/虚空在<b>混合端</b>上可能生不出，仅普通服有效）。</li>
+ *   <li>普通版（bukkit）：用 Bukkit 原版生成建世界（超平坦/虚空在<b>混合端</b>上可能生不出，仅普通服有效）；
+ *       NATURAL 可交给扩展注册的地形 provider 接管。</li>
  *   <li>增强版（neoforge_26_2）：用 NeoForge 动态维度 + 原生 ChunkGenerator（M7 填）。</li>
  * </ul>
  */
@@ -28,11 +29,22 @@ public interface WorldControl {
     Shelter ensureWorld(Shelter shelter);
 
     /**
-     * 异步建世界（决策 #26 进度条 / #55 串行队列）：对禁止主线程 create 的引擎（Iris）在异步线程建、
-     * 建好回主线程调 {@code onReady}；失败回主线程调 {@code onError}。{@code progressAudience} 为触发玩家
-     * UUID（在线则其客户端显示生成进度条），可为 {@code null}。
+     * 「回调式」建世界（决策 #26 进度条 / #55 串行队列）：结果经 {@code onReady} / {@code onError} 返回，
+     * 调用方不必依赖返回值。{@code progressAudience} 为触发玩家 UUID（在线则其客户端显示生成进度条），
+     * 可为 {@code null}。
      *
-     * <p>默认实现同步：直接 {@code ensureWorld} 后回调（普通/已加载世界走这条，行为不变）。
+     * <p><b>名字叫 Async 但默认实现是同步的</b>——这是刻意保留的语义差异，不是遗漏：
+     * 原版 {@code WorldCreator.createWorld()} 与 {@code setGameRule}/{@code setSpawnLocation}/
+     * {@code Block#setType} 等都<b>必须主线程</b>（Bukkit 硬限制，挪到后台线程会抛
+     * {@code IllegalStateException: Asynchronous world creation}），所以默认实现只能在调用线程上
+     * 直接建完再回调。
+     *
+     * <p>真正的异步来自两处：① 文档里说的「禁止主线程 create 的引擎」——例如 Iris，它自己接管生成器
+     * 并自行 submit 回主线程完成 addLevel，因此 provider 可以真异步；② 平台实现自行选择延迟调度。
+     * 当前 {@code FLAT} / {@code VOID} / 未装地形 provider / provider 失败回退等路径全部走本默认实现，
+     * 即<b>在调用线程同步建完</b>。若在命令上下文调用会短暂阻塞主线程（原版建世界固有代价）。
+     *
+     * <p>失败时默认实现先调 {@code onError} 再把异常抛给调用方。
      */
     default void ensureWorldAsync(Shelter shelter, UUID progressAudience,
                                   Consumer<Shelter> onReady, Runnable onError) {
@@ -76,7 +88,7 @@ public interface WorldControl {
     }
 
     /**
-     * 该世界地形是否<b>惰性生成</b>（Iris：异步、玩家走到哪生成到哪，决策 #31）。
+     * 该世界地形是否<b>惰性生成</b>（玩家走到哪生成到哪）。
      * 为 {@code true} 时扩界后<b>不应</b>立刻预生成新环（会抵消惰性、卡服）。
      */
     default boolean lazilyGenerated(String worldName) {

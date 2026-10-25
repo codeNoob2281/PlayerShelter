@@ -30,6 +30,13 @@ def gsApiJar = (new File(settingsDir, 'libs').listFiles() ?: []).find {
 if (gsApiJar != null) {
     include 'gs-bridge'    // 独立扩展：GuildShelter 自动迁移（依赖 GS API，仅 compileOnly）
 }
+// Iris 地形扩展（独立扩展 jar）。同理：只有 libs/ 里放了 iris-*.jar 才纳入构建。
+def irisJar = (new File(settingsDir, 'libs').listFiles() ?: []).find {
+    it.name.startsWith('iris-') && it.name.endsWith('.jar')
+}
+if (irisJar != null) {
+    include 'iris-bridge'  // 独立扩展：Iris 地形生成（依赖 Iris API，仅 compileOnly）
+}
 // neoforge 载体目录在 .gitignore 里（本地增强版），只在本机存在时纳入构建。
 if (file('neoforge_26_2/build.gradle').exists()) {
     include 'neoforge_26_2' // 本地增强版：混合端(NeoForge 26.2)原生接缝 jar

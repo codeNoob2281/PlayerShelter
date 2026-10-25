@@ -116,16 +116,6 @@ public final class PluginConfig {
         return cfg.getBoolean("economy.enabled", true);
     }
 
-    /** NATURAL 世界是否优先用 Iris 生成（决策 #1，需服务器装 Iris；缺席自动回退原版 normal）。 */
-    public boolean irisEnabled() {
-        return cfg.getBoolean("generation.iris.enabled", true);
-    }
-
-    /** Iris 维度包名（默认 overworld）。 */
-    public String irisDimension() {
-        return cfg.getString("generation.iris.dimension", "overworld");
-    }
-
     public Map<String, String> gamerules() {
         Map<String, String> out = new LinkedHashMap<>();
         ConfigurationSection sec = cfg.getConfigurationSection("world.gamerules");
