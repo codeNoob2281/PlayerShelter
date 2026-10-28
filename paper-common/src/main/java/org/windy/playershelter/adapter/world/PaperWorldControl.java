@@ -142,17 +142,24 @@ public final class PaperWorldControl implements WorldControl {
 
         world.setSpawnFlags(true, true);
 
+        // 以下只在「首建」时执行。重载已有存档时绝不能重跑：
+        //  · 出生点会被玩家用 /ps setspawn 改过，重设会把它按回 (8, y, 8)（重启后设点丢失的根因）；
+        //  · 虚空起始小岛重摆会覆盖玩家在小岛位置的建筑并重置箱子。
         if (freshWorld) {
             applyConfiguredGameRules(world);
-        }
 
-        if (shelter.genType() == GenerationType.VOID) {
-            buildStarterIsland(world);
-        }
+            if (shelter.genType() == GenerationType.VOID) {
+                buildStarterIsland(world);
+            }
 
-        // 出生点落在锚定角第一个 chunk 中心；地块范围固定为 chunk (0..max-1, 0..max-1)。
-        Location spawn = safeLanding.resolve(world, 8, 8);
-        world.setSpawnLocation(spawn.getBlockX(), spawn.getBlockY(), spawn.getBlockZ());
+            // 出生点落在锚定角第一个 chunk 中心；地块范围固定为 chunk (0..max-1, 0..max-1)。
+            // 之后由 level.dat 持久化，重载时沿用（见上）。
+            Location spawn = safeLanding.resolve(world, 8, 8);
+            world.setSpawnLocation(spawn.getBlockX(), spawn.getBlockY(), spawn.getBlockZ());
+        } else {
+            log.info("[PlayerShelter] 重载已有庇护所世界 " + name + "，沿用存档出生点 "
+                    + formatLoc(world.getSpawnLocation()));
+        }
         applyBorder(shelter);
         log.info("[PlayerShelter] 已创建庇护所世界 " + name + " (" + shelter.genType() + ")");
 
@@ -509,5 +516,10 @@ public final class PaperWorldControl implements WorldControl {
     public Location safeSpawn(World world) {
         Location s = world.getSpawnLocation();
         return safeLanding.resolve(world, s.getBlockX(), s.getBlockZ());
+    }
+
+    /** 日志用：把坐标压成一行。 */
+    private static String formatLoc(Location loc) {
+        return "(" + loc.getBlockX() + ", " + loc.getBlockY() + ", " + loc.getBlockZ() + ")";
     }
 }
