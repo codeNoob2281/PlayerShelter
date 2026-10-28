@@ -191,9 +191,20 @@ public abstract class AbstractPlayerShelterPlugin extends JavaPlugin {
         getServer().getServicesManager().register(PlayerShelterApi.class, api, this, ServicePriority.Normal);
 
         if (getServer().getPluginManager().getPlugin("PlaceholderAPI") != null) {
-            this.papiExpansion = new PlayerShelterExpansion(core);
-            papiExpansion.register();
-            getLogger().info("[PlayerShelter] Registered PlaceholderAPI expansion.");
+            try {
+                this.papiExpansion = new PlayerShelterExpansion(core);
+                // register() 返回 false = 注册被拒（同类扩展已存在），此时不持有实例，免得关服时白注销。
+                if (papiExpansion.register()) {
+                    getLogger().info("[PlayerShelter] Registered PlaceholderAPI expansion.");
+                } else {
+                    this.papiExpansion = null;
+                    getLogger().warning("[PlayerShelter] PlaceholderAPI expansion was rejected (already registered?).");
+                }
+            } catch (Throwable t) {
+                this.papiExpansion = null;
+                getLogger().log(java.util.logging.Level.WARNING,
+                        "[PlayerShelter] Failed to register PlaceholderAPI expansion", t);
+            }
         }
 
         // GuildShelter 软集成（获得庄园时自动迁移庇护所）已拆到独立扩展插件 PlayerShelter-GSBridge：
@@ -203,37 +214,72 @@ public abstract class AbstractPlayerShelterPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        if (dropSweeper != null) {
-            dropSweeper.stop();
-            dropSweeper = null;
-        }
-        if (sweeper != null) {
-            sweeper.stop();
-            sweeper = null;
-        }
-        if (lifecycle != null) {
-            lifecycle.stop();
-            lifecycle = null;
-        }
-        getServer().getScheduler().cancelTasks(this);
-        HandlerList.unregisterAll(this);
-        if (papiExpansion != null) {
-            papiExpansion.unregister();
-            papiExpansion = null;
-        }
-        if (transfer != null) {
-            transfer.unregister();
-            transfer = null;
-        }
-        if (database != null) {
-            database.close();
-            database = null;
-        }
-        getServer().getServicesManager().unregisterAll(this);
+        // 关服时各步骤必须彼此独立：任何一步抛异常都不能连累后面的清理
+        // （历史上 PAPI 注销 NPE 就把服务注销与数据库 close 全跳过了）。
+        safe("stop drop sweeper", () -> {
+            if (dropSweeper != null) {
+                dropSweeper.stop();
+                dropSweeper = null;
+            }
+        });
+        safe("stop inactive sweeper", () -> {
+            if (sweeper != null) {
+                sweeper.stop();
+                sweeper = null;
+            }
+        });
+        safe("stop world lifecycle", () -> {
+            if (lifecycle != null) {
+                lifecycle.stop();
+                lifecycle = null;
+            }
+        });
+        safe("cancel tasks", () -> getServer().getScheduler().cancelTasks(this));
+        safe("unregister listeners", () -> HandlerList.unregisterAll(this));
+        safe("unregister placeholder expansion", () -> {
+            if (papiExpansion != null) {
+                try {
+                    // persist()=true 的扩展要手动注销，但 PlaceholderAPI 的 onDisable 里会执行
+                    // instance = null；本插件 load: AFTER，关服时 PAPI 先被禁用，于是
+                    // PlaceholderExpansion#getPlaceholderAPI() 返回 null，unregister() 内部直接 NPE。
+                    // 判据用 getPlaceholderAPI()（等价于 PlaceholderAPIPlugin.getInstance()）是否为 null：
+                    // 为 null 说明 PAPI 已经关完了，它的 LocalExpansionManager 也早已被 kill，
+                    // 此时无需也不该再注销。
+                    if (papiExpansion.getPlaceholderAPI() != null) {
+                        papiExpansion.unregister();
+                    }
+                } finally {
+                    papiExpansion = null;
+                }
+            }
+        });
+        safe("unregister plugin channel", () -> {
+            if (transfer != null) {
+                transfer.unregister();
+                transfer = null;
+            }
+        });
+        safe("close database", () -> {
+            if (database != null) {
+                database.close();
+                database = null;
+            }
+        });
+        safe("unregister services", () -> getServer().getServicesManager().unregisterAll(this));
         PROTECTION = null;
         CORE0 = null;
         core = null;
         getLogger().info("PlayerShelter disabled.");
+    }
+
+    /** 关服清理的单步保护：记录失败但不中断后续步骤。 */
+    private void safe(String what, Runnable action) {
+        try {
+            action.run();
+        } catch (Throwable t) {
+            getLogger().log(java.util.logging.Level.WARNING,
+                    "[PlayerShelter] Shutdown step failed (" + what + "): " + t, t);
+        }
     }
 
     private void saveResourceIfMissing(String path) {
