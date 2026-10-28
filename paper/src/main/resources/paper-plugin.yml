@@ -43,6 +43,7 @@ permissions:
   # 玩家子命令开关，默认放行；服主想按等级收紧时改 default。
   playershelter.command.create: { default: true }
   playershelter.command.home: { default: true }
+  playershelter.command.leave: { default: true }
   playershelter.command.setspawn: { default: true }
   playershelter.command.info: { default: true }
   playershelter.command.upgrade: { default: true }

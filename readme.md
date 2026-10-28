@@ -46,7 +46,7 @@
 ## 功能
 
 - 每个玩家拥有独立世界，支持 SQLite / MySQL 存储
-- 命令：`/ps create|home|setspawn|info|gui|upgrade|reset|visibility|trust|visit|list|like|flag|board|msg` 等
+- 命令：`/ps create|home|leave|setspawn|info|gui|upgrade|reset|visibility|trust|visit|list|like|flag|board|msg` 等
 - GUI：`/ps gui` 打开庇护所控制器
 - 等级系统：通过 `levels.yml` 管理边界大小、升级费用、成员名额和实体限额
 - 保护：访客限制、越界保护、PvP/刷怪/爆炸/火焰/容器/交互保护

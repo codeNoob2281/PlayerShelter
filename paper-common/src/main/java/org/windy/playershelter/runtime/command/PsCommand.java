@@ -52,6 +52,7 @@ public final class PsCommand implements TabExecutor {
     private static final Map<String, String> COMMAND_PERMS = Map.ofEntries(
             Map.entry("create", "playershelter.command.create"),
             Map.entry("home", "playershelter.command.home"),
+            Map.entry("leave", "playershelter.command.leave"),
             Map.entry("setspawn", "playershelter.command.setspawn"),
             Map.entry("info", "playershelter.command.info"),
             Map.entry("upgrade", "playershelter.command.upgrade"),
@@ -106,6 +107,7 @@ public final class PsCommand implements TabExecutor {
         switch (sub) {
             case "create" -> create(sender, rest);
             case "home" -> home(sender);
+            case "leave" -> leave(sender);
             case "setspawn" -> setspawn(sender);
             case "info" -> info(sender);
             case "upgrade" -> upgrade(sender);
@@ -197,6 +199,22 @@ public final class PsCommand implements TabExecutor {
     private void goHome(Player p, Shelter s) {
         // 经路由：本服直接传送，他服承载则跨服换服（决策 #59）。
         router.send(p, s, Messages.get("world-load-failed-retry", "世界加载失败，请稍后再试。"));
+    }
+
+    // —— leave（离开家园，回到进门前的那个位置：主世界 / 下界 / 末地）——
+
+    /**
+     * {@code /ps leave}：离开当前庇护所世界，回到进门前的落脚点。
+     *
+     * <p>不要求玩家拥有庇护所——串门的人也应该能离开。逻辑全在 {@link org.windy.playershelter.runtime.ShelterRouter#leave}：
+     * 有记录按原路送回（含跨服），无记录回主世界出生点。
+     */
+    private void leave(CommandSender sender) {
+        if (!(sender instanceof Player p)) {
+            Messages.errorKey(sender, "player-only", "只有玩家能使用这个命令。");
+            return;
+        }
+        router.leave(p, Messages.get("leave.teleport-failed", "传送失败，请稍后再试。"));
     }
 
     // —— setspawn（决策 #23 owner 改落点）——
@@ -988,6 +1006,7 @@ public final class PsCommand implements TabExecutor {
         Messages.plainKey(sender, "help.header", "&b==== PlayerShelter 一人一世界 ====");
         Messages.plainKey(sender, "help.create", "&f/ps create <natural|flat|void> &7创建你的庇护所");
         Messages.plainKey(sender, "help.home", "&f/ps home &7回家");
+        Messages.plainKey(sender, "help.leave", "&f/ps leave &7离开家园，回到来之前的位置（主世界/下界/末地）");
         Messages.plainKey(sender, "help.setspawn", "&f/ps setspawn &7把出生点设到脚下");
         Messages.plainKey(sender, "help.info", "&f/ps info &7查看庇护所信息");
         Messages.plainKey(sender, "help.gui", "&f/ps gui &7打开庇护所控制器");
@@ -1059,7 +1078,7 @@ public final class PsCommand implements TabExecutor {
     // —— Tab 补全 ——
 
     private static final List<String> SUBS = Arrays.asList(
-            "create", "home", "setspawn", "info", "upgrade", "reset", "confirm",
+            "create", "home", "leave", "setspawn", "info", "upgrade", "reset", "confirm",
             "visibility", "trust", "untrust", "admin", "migrate", "access", "deny", "undeny",
             "time", "weather", "top", "tag", "search", "gui", "controller", "board", "msg",
             "visit", "list", "like", "bulletin", "flag", "flags", "help");

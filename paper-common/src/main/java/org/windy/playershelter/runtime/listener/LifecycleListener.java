@@ -46,6 +46,24 @@ public final class LifecycleListener implements Listener {
         markIfShelterWorld(p.getWorld().getName());
         // 跨服交接：本服承载目标庇护所时，刚换服到站的玩家在此被送进对应世界（决策 #57/#59）。
         consumePending(p);
+        // 跨服返还：/ps leave 把人发回原后端服后，到站这边按记录里的坐标落位。
+        consumePendingReturn(p);
+    }
+
+    /** 消费跨服返还：{@code /ps leave} 的目标后端在人到站后把人放回原坐标。延迟一拍等客户端就绪。 */
+    private void consumePendingReturn(Player p) {
+        // 单服模式不存在「发车」记录，省掉每次登录的一次 DB 读。
+        if (!core.crossServer()) {
+            return;
+        }
+        core.plugin().getServer().getScheduler().runTaskLater(core.plugin(),
+                () -> {
+                    if (!p.isOnline()) {
+                        return;
+                    }
+                    new org.windy.playershelter.runtime.ShelterRouter(core)
+                            .completePendingArrival(p, Messages.get("leave.teleport-failed", "传送失败，请稍后再试。"));
+                }, 20L);
     }
 
     /** 消费跨服待办：到站后进目标庇护所（决策 #57/#59）。延迟一拍，等玩家完全加入再传送。 */

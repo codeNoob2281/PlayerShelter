@@ -87,6 +87,16 @@ messages:
   home:
     teleporting: "「浩浩乎如冯虚御风」正在传送，欢迎回家…"
 
+  leave:
+    not-in-shelter: "&#ff6b6b你现在不在任何庇护所世界里，无需离开。"
+    no-record: "&f没有记录到你进入家园前的位置，正在送你回主世界出生点…"
+    teleporting: "「归去来兮，田园将芜胡不归」正在送你回原来的位置…"
+    cross-server: "正在把你送回原来的服务器…"
+    world-gone: "&#ff6b6b你原来所在的世界已经无法加载，正在送你回主世界出生点…"
+    teleport-failed: "&#ff6b6b传送失败，请稍后再试。"
+    success: "已离开家园，回到了你原来的位置。"
+    success-main-spawn: "已离开家园，回到了主世界出生点。"
+
   setspawn:
     must-be-home: "&#ff6b6b你必须站在自己的庇护所世界里，才能设置出生点。"
     success: "已将庇护所的出生点设置在你脚下的位置。"
@@ -348,6 +358,7 @@ messages:
     header: "&#8ee5ee❖ PlayerShelter 庇护所帮助 ❖"
     create: "&#8ee5ee/ps create <natural|flat|void> &f创建你的庇护所"
     home: "&#8ee5ee/ps home &f回到庇护所"
+    leave: "&#8ee5ee/ps leave &f离开家园，回到来之前的位置（主世界 / 下界 / 末地）"
     setspawn: "&#8ee5ee/ps setspawn &f将出生点设置在脚下"
     info: "&#8ee5ee/ps info &f查看当前庇护所信息"
     gui: "&#8ee5ee/ps gui &f打开庇护所控制面板"

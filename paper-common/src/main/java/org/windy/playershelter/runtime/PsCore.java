@@ -9,6 +9,7 @@ import org.windy.playershelter.domain.port.EconomyPort;
 import org.windy.playershelter.domain.port.MessageBoardStore;
 import org.windy.playershelter.domain.port.PendingActionStore;
 import org.windy.playershelter.domain.port.RegionMover;
+import org.windy.playershelter.domain.port.ReturnPointStore;
 import org.windy.playershelter.domain.port.ShelterRepository;
 import org.windy.playershelter.domain.port.TagStore;
 import org.windy.playershelter.domain.port.WorldControl;
@@ -41,13 +42,15 @@ public final class PsCore {
     private final BuildCheckRegistry buildChecks;
     private final TerrainProviderRegistry terrainProviders;
     private final RegionMover regionMover;
+    private final ReturnPointStore returnPoints;
 
     public PsCore(JavaPlugin plugin, ShelterRepository repo, WorldControl world, DirectoryPort directory,
                   EconomyPort economy, ShelterService shelterService, WorldLifecycleService lifecycle,
                   ShelterConfig config, SafeLanding safeLanding, PendingActionStore pending,
                   ServerTransfer transfer, boolean crossServer, LimitEnforcer limits,
                   TagStore tags, MessageBoardStore board, BuildCheckRegistry buildChecks,
-                  TerrainProviderRegistry terrainProviders, RegionMover regionMover) {
+                  TerrainProviderRegistry terrainProviders, RegionMover regionMover,
+                  ReturnPointStore returnPoints) {
         this.plugin = plugin;
         this.repo = repo;
         this.world = world;
@@ -66,6 +69,7 @@ public final class PsCore {
         this.buildChecks = buildChecks;
         this.terrainProviders = terrainProviders;
         this.regionMover = regionMover;
+        this.returnPoints = returnPoints;
     }
 
     public JavaPlugin plugin() { return plugin; }
@@ -85,6 +89,7 @@ public final class PsCore {
     public BuildCheckRegistry buildChecks() { return buildChecks; }
     public TerrainProviderRegistry terrainProviders() { return terrainProviders; }
     public RegionMover regionMover() { return regionMover; }
+    public ReturnPointStore returnPoints() { return returnPoints; }
 
     /** 是否启用跨服模式（config.yml cross_server=true 且 server.yml 本服名非空）。 */
     public boolean crossServer() { return crossServer; }

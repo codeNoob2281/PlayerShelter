@@ -150,11 +150,13 @@ public abstract class AbstractPlayerShelterPlugin extends JavaPlugin {
                 new org.windy.playershelter.adapter.storage.SqlTagStore(database, getLogger());
         org.windy.playershelter.domain.port.MessageBoardStore board =
                 new org.windy.playershelter.adapter.storage.SqlMessageBoardStore(database, getLogger());
+        org.windy.playershelter.domain.port.ReturnPointStore returnPoints =
+                new org.windy.playershelter.adapter.storage.SqlReturnPointStore(database, getLogger());
 
         this.core = new PsCore(this, repo, world, directory, economy, shelterService, lifecycle, config,
                 safeLanding, pending, transfer, crossServer, limits, tags, board,
                 new org.windy.playershelter.runtime.api.BuildCheckRegistry(), terrainProviders,
-                bindings.regionMover());
+                bindings.regionMover(), returnPoints);
 
         PROTECTION = new ShelterProtection(core);
         CORE0 = core;

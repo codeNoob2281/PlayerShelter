@@ -63,6 +63,14 @@ items:
     lore:
       - "&7把庄园出生点设到脚下。"
     action: "command:ps setspawn"
+  leave:
+    index: 34
+    material: BEACON
+    name: "&6离开家园"
+    lore:
+      - "&7回到进入庄园前所在的位置。"
+      - "&8主世界 / 下界 / 末地，坐标与朝向原样恢复。"
+    action: "command:ps leave"
   upgrade:
     index: 32
     material: EXPERIENCE_BOTTLE

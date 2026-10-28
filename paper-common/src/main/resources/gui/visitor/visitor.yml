@@ -35,6 +35,14 @@ items:
     lore:
       - "&7传送回自己的庇护所。"
     action: "command:ps home"
+  leave:
+    index: 26
+    material: BEACON
+    name: "&6离开家园"
+    lore:
+      - "&7回到来之前的位置。"
+      - "&8主世界 / 下界 / 末地，坐标与朝向原样恢复。"
+    action: "command:ps leave"
   back:
     index: 40
     material: ARROW

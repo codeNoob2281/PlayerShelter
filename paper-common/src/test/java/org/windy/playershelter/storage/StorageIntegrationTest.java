@@ -137,7 +137,7 @@ class StorageIntegrationTest {
             try (var c = legacyDb.connection();
                  var rs = c.createStatement().executeQuery("SELECT MAX(version) FROM ps_schema_history")) {
                 assertTrue(rs.next());
-                assertEquals(8, rs.getInt(1));
+                assertEquals(9, rs.getInt(1));
             }
             Shelter legacy = new SqlShelterRepository(legacyDb, log)
                     .find(PlayerRef.of(UUID.fromString("00000000-0000-0000-0000-000000000001")))
@@ -371,6 +371,34 @@ class StorageIntegrationTest {
         assertEquals(1, found.size());
         assertEquals(hi, found.get(0).owner().uuid());
         assertTrue(dir.searchByTag("不存在", 0, 10).isEmpty());
+    }
+
+    @Test
+    void returnPointRoundTripAndUpsert() {
+        org.windy.playershelter.adapter.storage.SqlReturnPointStore store =
+                new org.windy.playershelter.adapter.storage.SqlReturnPointStore(db, log);
+        PlayerRef player = PlayerRef.of(UUID.randomUUID());
+        assertTrue(store.find(player).isEmpty());
+
+        // 下界坐标 + 朝向，待返标记默认 false。
+        store.save(org.windy.playershelter.domain.model.ReturnPoint.of(
+                player, "world_nether", "lobby-1", 12.5, 71.0, -30.25, 90.0f, -12.5f));
+        var loaded = store.find(player).orElseThrow();
+        assertEquals("world_nether", loaded.worldName());
+        assertEquals("lobby-1", loaded.serverName());
+        assertEquals(12.5, loaded.x());
+        assertEquals(71.0, loaded.y());
+        assertEquals(-30.25, loaded.z());
+        assertEquals(90.0f, loaded.yaw());
+        assertEquals(-12.5f, loaded.pitch());
+        assertFalse(loaded.pendingArrival());
+
+        // upsert：同玩家覆盖，且 pending 标记能落库回读（跨服发车用）。
+        store.save(loaded.withPendingArrival(true));
+        assertTrue(store.find(player).orElseThrow().pendingArrival());
+
+        store.delete(player);
+        assertTrue(store.find(player).isEmpty());
     }
 
     @Test

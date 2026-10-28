@@ -134,6 +134,22 @@ public final class Migrations {
                 "ALTER TABLE ps_shelter ADD COLUMN limits TEXT"
         )));
 
+        // v9：/ps leave 的落脚点（离开家园前的位置，返回主世界/下界/末地原处）。
+        // 每人一条；server_name 供跨服返还换服用，pending_arrival 标记「已发车待在目标后端消费」。
+        all.add(new Step(9, List.of(
+                "CREATE TABLE IF NOT EXISTS ps_return_point (" +
+                        "player_uuid VARCHAR(36) PRIMARY KEY," +
+                        "world_name VARCHAR(64) NOT NULL," +
+                        "server_name VARCHAR(64)," +
+                        "x DOUBLE NOT NULL," +
+                        "y DOUBLE NOT NULL," +
+                        "z DOUBLE NOT NULL," +
+                        "yaw REAL NOT NULL," +
+                        "pitch REAL NOT NULL," +
+                        "pending_arrival INT NOT NULL DEFAULT 0," +
+                        "created_at " + big + " NOT NULL)"
+        )));
+
         return all;
     }
 
