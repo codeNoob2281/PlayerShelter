@@ -78,6 +78,46 @@ class StorageIntegrationTest {
         assertTrue(repo.all().isEmpty());
     }
 
+    /**
+     * 模拟「表/索引/列都已存在，但 ps_schema_history 是空的」——即上一次迁移中途失败
+     * （MySQL 的 DDL 隐式提交、无法回滚，崩溃后就会落到这个状态）。
+     * 迁移必须能自己接上而不炸，靠的是 Java 侧的存在性判断，而不是各后端不一致的方言语法。
+     */
+    @Test
+    void migrationRecoversFromPartiallyAppliedSchema() throws Exception {
+        File partialFile = File.createTempFile("ps-partial", ".db");
+        Database partialDb = Database.sqlite(partialFile);
+        try {
+            // 先老老实实迁移一遍，得到一个完整 v9 schema。
+            new Migrations(partialDb, log).migrate();
+            // 再清空历史表：下次启动会以为什么都没应用过，把 v1~v9 全部重放。
+            try (var c = partialDb.connection(); var st = c.createStatement()) {
+                st.execute("DELETE FROM ps_schema_history");
+            }
+
+            // 关键断言：重放不抛异常（索引/列已存在时自行跳过）。
+            new Migrations(partialDb, log).migrate();
+
+            try (var c = partialDb.connection();
+                 var rs = c.createStatement().executeQuery("SELECT MAX(version) FROM ps_schema_history")) {
+                assertTrue(rs.next());
+                assertEquals(9, rs.getInt(1));
+            }
+            // 索引应只有一份（不是重复建的）。
+            try (var c = partialDb.connection();
+                 var rs = c.createStatement().executeQuery(
+                         "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'idx_ps_shelter_world'")) {
+                assertTrue(rs.next());
+                assertEquals(1, rs.getInt(1));
+            }
+        } finally {
+            partialDb.close();
+            Files.deleteIfExists(partialFile.toPath());
+            Files.deleteIfExists(new File(partialFile.getAbsolutePath() + "-wal").toPath());
+            Files.deleteIfExists(new File(partialFile.getAbsolutePath() + "-shm").toPath());
+        }
+    }
+
     @Test
     void migrationUpgradesV5DatabaseToV6() throws Exception {
         File legacyFile = File.createTempFile("ps-v5", ".db");
